@@ -3,7 +3,7 @@ const path = require('path');
 const chokidar = require('chokidar'); // you need to install it first
 
 let textFiles = {};
-const dirPath = '\Deep.project\sync-file\deep-files-sync\dirPath';
+const dirPath = '\\Users\\samsung\\Deep.project\\sync-file\\deep-files-sync\\dirPath\\';
 
 // Initial load
 fs.readdir(dirPath, (err, files) => {
@@ -23,6 +23,7 @@ fs.readdir(dirPath, (err, files) => {
             }
             // add each file content to textFiles object
             textFiles[file] = data;
+            console.log(textFiles);
         });
     });
 });
@@ -39,6 +40,8 @@ chokidar.watch(dirPath).on('change', (filePath) => {
             // update file content in textFiles object
             textFiles[file] = data;
             console.log(`Updated content of ${file}`);
+            console.log(textFiles);
         });
     }
 });
+
