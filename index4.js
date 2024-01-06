@@ -29,6 +29,7 @@ watch.watchTree(srcDir, { interval: 1 }, (f, curr, prev) => {
         });
     } else {
         // f was changed
+        console.log(f, curr, prev);
         fs.copyFile(f, path.join(destDir, base), (err) => {
             if (err) console.error(`Error copying file: ${err}`);
             else console.log(`Updated file ${base} in ${destDir}`);
