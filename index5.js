@@ -13,9 +13,14 @@ function handleFileChange(absoluteFilePath, curr, prev) {
   let file = path.basename(absoluteFilePath);
  // if file added
   if (prev === null) {
+    //проверка наличия файла по его абсолютному пути
     if (files[absoluteFilePath] === undefined) {
         // проверка идентификатора
         if (pendingRenames[curr.ino]) {
+            const previousFileName = pendingRenames[curr.ino];
+            const fileData = files[previousFileName];
+            delete files[previousFileName];
+            files[absoluteFilePath] = fileData;
             console.log(`File ${pendingRenames[curr.ino]} renamed to ${file}`);
             delete pendingRenames[curr.ino];
         } 
@@ -24,8 +29,6 @@ function handleFileChange(absoluteFilePath, curr, prev) {
              files[absoluteFilePath] = fileData;
              console.log(`File ${file} added`);
         }
-
-        
      }
      
       
@@ -33,7 +36,7 @@ function handleFileChange(absoluteFilePath, curr, prev) {
       // file removed
       //if (inodeMap[prev.ino]) {
           // wait a moment to see if this inode comes back (rename)
-          pendingRenames[prev.ino] = true;
+          pendingRenames[prev.ino] = absoluteFilePath;
           //delete inodeMap[prev.ino];
           setTimeout(() => {
               if (pendingRenames[prev.ino]) {
