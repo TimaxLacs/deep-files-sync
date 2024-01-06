@@ -1,7 +1,7 @@
 const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
-
+let files = {};
 let inodeMap = {};
 
 let dirPath = '\\Users\\samsung\\Deep.project\\sync-file\\deep-files-sync\\dirPath\\'; // Your directory path
@@ -9,18 +9,26 @@ let dirPath = '\\Users\\samsung\\Deep.project\\sync-file\\deep-files-sync\\dirPa
 let pendingRenames = {};
 
 // Handle events
-function handleFileChange(f, curr, prev) {
-  let file = path.basename(f);
-
+function handleFileChange(absoluteFilePath, curr, prev) {
+  let file = path.basename(absoluteFilePath);
+ // if file added
   if (prev === null) {
-      // file added
-      if (pendingRenames[curr.ino]) {
-          console.log(`File ${pendingRenames[curr.ino]} renamed to ${file}`);
-          delete pendingRenames[curr.ino];
-      } 
-      else {
-          console.log(`File ${file} added`);
-      }
+    if (files[absoluteFilePath] === undefined) {
+        // проверка идентификатора
+        if (pendingRenames[curr.ino]) {
+            console.log(`File ${pendingRenames[curr.ino]} renamed to ${file}`);
+            delete pendingRenames[curr.ino];
+        } 
+        else {
+            const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8', flag: 'r' });
+             files[absoluteFilePath] = fileData;
+             console.log(`File ${file} added`);
+        }
+
+        
+     }
+     
+      
   } else if (curr.nlink === 0) {
       // file removed
       if (inodeMap[prev.ino]) {
@@ -58,9 +66,9 @@ fs.readdir(dirPath, (err, files) => {
 });
 
 // Monitor the directory
-watch.watchTree(dirPath, (f, curr, prev) => {
-  console.log(f, curr, prev);
-  if (typeof f === "object" && prev === null && curr === null) {
+watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
+  //console.log(f, curr, prev);
+  if (typeof f === "object") {
       // Initial scanning complete
   } else {
       handleFileChange(f, curr, prev);
