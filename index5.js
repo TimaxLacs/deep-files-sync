@@ -65,28 +65,21 @@ function handleFileChange(absoluteFilePath, current, previous) {
     }
 }
 
-// Initial load
-fs.readdir(dirPath, (err, files) => {
-    if (err) {
-        console.error(`Error reading directory: ${err}`);
-        return;
-    }
-    files.forEach(file => {
-        fs.stat(path.join(dirPath, file), (err, stats) => {
-            if (err) {
-                console.error(`Error stating file: ${err}`);
-            } else {
-                inodeMap[stats.ino] = file;
-            }
-        });
-    });
-});
-
 // Monitor the directory
 watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
     //console.log(f, curr, prev);
     if (typeof f === "object") {
         // Initial scanning complete
+        const filesStats = f;
+        Object.keys(filesStats).forEach(fileName => {
+            if (fileName == dirPath) {
+                return;
+            }
+            const fileData = fs.readFileSync(fileName, { encoding: 'utf8' });
+            files[fileName] = fileData;
+        })
+        console.log(`Files initialized`);
+        console.log(JSON.stringify(files, null, 2));
     } else {
         handleFileChange(f, curr, prev);
     }
