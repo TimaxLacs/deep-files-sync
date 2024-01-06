@@ -78,7 +78,7 @@ watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
             const fileData = fs.readFileSync(fileName, { encoding: 'utf8' });
             files[fileName] = fileData;
         })
-        console.log(`Files initialized`);
+        console.log(`Files initialized `);
         console.log(JSON.stringify(files, null, 2));
     } else {
         handleFileChange(f, curr, prev);
