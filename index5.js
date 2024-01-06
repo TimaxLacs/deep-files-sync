@@ -17,7 +17,8 @@ function handleFileChange(f, curr, prev) {
       if (pendingRenames[curr.ino]) {
           console.log(`File ${pendingRenames[curr.ino]} renamed to ${file}`);
           delete pendingRenames[curr.ino];
-      } else {
+      } 
+      else {
           console.log(`File ${file} added`);
       }
   } else if (curr.nlink === 0) {
@@ -58,6 +59,7 @@ fs.readdir(dirPath, (err, files) => {
 
 // Monitor the directory
 watch.watchTree(dirPath, (f, curr, prev) => {
+  console.log(f, curr, prev);
   if (typeof f === "object" && prev === null && curr === null) {
       // Initial scanning complete
   } else {
