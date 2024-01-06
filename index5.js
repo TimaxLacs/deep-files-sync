@@ -31,17 +31,17 @@ function handleFileChange(absoluteFilePath, curr, prev) {
       
   } else if (curr.nlink === 0) {
       // file removed
-      if (inodeMap[prev.ino]) {
+      //if (inodeMap[prev.ino]) {
           // wait a moment to see if this inode comes back (rename)
-          pendingRenames[prev.ino] = inodeMap[prev.ino];
-          delete inodeMap[prev.ino];
+          pendingRenames[prev.ino] = true;
+          //delete inodeMap[prev.ino];
           setTimeout(() => {
               if (pendingRenames[prev.ino]) {
                   console.log(`File ${pendingRenames[prev.ino]} removed`);
                   delete pendingRenames[prev.ino];
               }
           }, 100);
-      }
+    // }
   } else {
       // file changed
       console.log(`File ${file} changed`);
