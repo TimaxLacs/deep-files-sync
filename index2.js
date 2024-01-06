@@ -2,7 +2,7 @@ const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
 const async = require('async');
-
+let deletedFiles = {};
 let textFiles = {};
 
 const dirPath = '\\Users\\samsung\\Deep.project\\sync-file\\deep-files-sync\\dirPath\\'; // Your directory path
