@@ -1,10 +1,28 @@
 #!/usr/bin/env node
+import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
+import { generateApolloClient } from "@deep-foundation/hasura/client.js";
+import { gql } from '@apollo/client/index.js';
+import { createRequire } from "module";
+import _ from 'lodash';
+import { assert } from 'chai';
+
+const apolloClient = generateApolloClient({
+    path: `${process.env.DEEPLINKS_HASURA_PATH}/v1/graphql`,
+    ssl: !!+process.env.DEEPLINKS_HASURA_SSL,
+    secret: process.env.DEEPLINKS_HASURA_SECRET,
+  });
+
+
+const require = createRequire(import.meta.url);
 const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
 let files = {};
 let inodeMap = {};
 
+const deep = new DeepClient({ apolloClient });
+const GQL_URN = process.env.GQL_URN 
+const GQL_SSL = process.env.GQL_SSL
 const token = process.argv[2];
 let dirPath = process.argv[3];
 const spaceIdArgument  = process.argv[4];
@@ -27,7 +45,9 @@ const makeDeepClient = (token) => {
     });
   
     const deepClient = new DeepClient({ apolloClient, linkId, token });
+    //console.log(deepClient);
     return deepClient;
+    
   }
 
 async function addedTextLinks(fileData){
@@ -35,10 +55,12 @@ async function addedTextLinks(fileData){
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
+    console.log(syncTextFile);
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
     console.log(fileData);
+    return syncTextFile;
 }
-async function addedContainLinks(spaceIdArgument){
+async function addedContainLinks(spaceIdArgument, syncTextFile){
     const spaceId = spaceIdArgument || (await deep.id('deep', 'admin'));
     const containTypeId = await deep.id('@deep-foundation/core', 'Contain');
     const spaceContainSyncTextFile = (await deep.insert({
@@ -74,11 +96,11 @@ function handleFileChange(absoluteFilePath, current, previous) {
                 const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
                 files[absoluteFilePath] = fileData;
 
-                addedTextLinks(fileData);
-                addedContainLinks(spaceIdArgument);
+                const syncTextFile = addedTextLinks(fileData);
+                addedContainLinks(spaceIdArgument, syncTextFile);
 
-                console.log(`File ${currentFileName} added`);
-                console.log(JSON.stringify(files, null, 2));
+                //console.log(`File ${currentFileName} added`);
+                //console.log(JSON.stringify(files, null, 2));
             }
         }
 
