@@ -1,0 +1,14 @@
+{
+    "name": "your-package-name",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index6.js",
+    "bin": {
+        "your-cli-name": "./index6.js"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "",
+    "license": "ISC"
+}
