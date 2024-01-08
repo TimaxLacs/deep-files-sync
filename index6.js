@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 let files = {};
 
-const GQL_URN = process.env.GQL_URN || 'https://3007-deepfoundation-dev-pfn7c1crkga.ws-eu107.gitpod.io/?dc-dg-ins=%7B%7D&space-id=380&container=380';
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-bv0ca02h7jr.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
 
 const token = process.argv[2];
