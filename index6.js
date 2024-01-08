@@ -1,28 +1,19 @@
 #!/usr/bin/env node
 import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
 import { generateApolloClient } from "@deep-foundation/hasura/client.js";
-import { gql } from '@apollo/client/index.js';
 import { createRequire } from "module";
 import _ from 'lodash';
-import { assert } from 'chai';
 
-const apolloClient = generateApolloClient({
-    path: `${process.env.DEEPLINKS_HASURA_PATH}/v1/graphql`,
-    ssl: !!+process.env.DEEPLINKS_HASURA_SSL,
-    secret: process.env.DEEPLINKS_HASURA_SECRET,
-  });
-
-
+let deepClient = {};
 const require = createRequire(import.meta.url);
 const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
 let files = {};
-let inodeMap = {};
 
-const deep = new DeepClient({ apolloClient });
-const GQL_URN = process.env.GQL_URN 
-const GQL_SSL = process.env.GQL_SSL
+const GQL_URN = process.env.GQL_URN || 'host.docker.internal:3006/gql';
+const GQL_SSL = process.env.GQL_SSL || 0;
+
 const token = process.argv[2];
 let dirPath = process.argv[3];
 const spaceIdArgument  = process.argv[4];
@@ -34,23 +25,23 @@ let pendingRenames = {};
 
 
 
-const makeDeepClient = (token) => {
-    if (!token) throw new Error('No token provided');
-    const decoded = parseJwt(token);
-    const linkId = decoded?.userId;
+const makeDeepClient = token => {
+    if (!token) throw new Error("No token provided")
+    const decoded = parseJwt(token)
+    const linkId = decoded?.userId
     const apolloClient = generateApolloClient({
       path: GQL_URN,
       ssl: !!+GQL_SSL,
-      token,
-    });
+      token
+    })
   
-    const deepClient = new DeepClient({ apolloClient, linkId, token });
-    //console.log(deepClient);
-    return deepClient;
-    
+    const deepClient = new DeepClient({ apolloClient, linkId, token })
+    console.log(deepClient);
+    return deepClient
   }
+  
 
-async function addedTextLinks(fileData){
+async function addedTextLinks(fileData, deep){
     const syncTextFileTypeId = await deep.id('@deep-foundation/core', 'SyncTextFile');
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
@@ -60,7 +51,7 @@ async function addedTextLinks(fileData){
     console.log(fileData);
     return syncTextFile;
 }
-async function addedContainLinks(spaceIdArgument, syncTextFile){
+async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     const spaceId = spaceIdArgument || (await deep.id('deep', 'admin'));
     const containTypeId = await deep.id('@deep-foundation/core', 'Contain');
     const spaceContainSyncTextFile = (await deep.insert({
@@ -78,7 +69,7 @@ function handleFileChange(absoluteFilePath, current, previous) {
     if (previous === null) {
         //проверка наличия файла по его абсолютному пути
         if (files[absoluteFilePath] === undefined) {
-            // проверка идентификатора
+            // проверка идентификатора --> rename или add
             if (pendingRenames[current.ino]) {
 
                 const previousAbsoluteFilePath = pendingRenames[current.ino];
@@ -96,8 +87,8 @@ function handleFileChange(absoluteFilePath, current, previous) {
                 const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
                 files[absoluteFilePath] = fileData;
 
-                const syncTextFile = addedTextLinks(fileData);
-                addedContainLinks(spaceIdArgument, syncTextFile);
+                const syncTextFile = addedTextLinks(fileData, deepClient);
+                addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
 
                 //console.log(`File ${currentFileName} added`);
                 //console.log(JSON.stringify(files, null, 2));
@@ -136,7 +127,7 @@ watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
     //console.log(f, curr, prev);
     if (typeof f === "object") {
         // Initial scanning complete
-        makeDeepClient(token);
+        deepClient = makeDeepClient(token);
         const filesStats = f;
         Object.keys(filesStats).forEach(fileName => {
             if (fileName == dirPath) {
