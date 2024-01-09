@@ -25,7 +25,7 @@ let pendingRenames = {};
 
 
 
-const makeDeepClient = token => {
+const makeDeepClient = async token => {
     if (!token) throw new Error("No token provided")
     const decoded = parseJwt(token)
     const linkId = decoded?.userId
@@ -41,13 +41,14 @@ const makeDeepClient = token => {
   
 
 async function addedTextLinks(fileData, deep){
-    console.log(11111111111111111111111111111111111);
+    console.log(11111111111111111111111111111);
     const syncTextFileTypeId = await deep.id('@deep-foundation/core', 'SyncTextFile');
-    console.log(22222222222222222222222222222222222);
+    console.log(22222222222222222222222222222);
+    console.log(syncTextFileTypeId);
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
-    console.log(33333333333333333333333333333333333);
+    console.log(33333333333333333333333333333);
     console.log(syncTextFile);
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
     //console.log(fileData);
@@ -125,7 +126,7 @@ function handleFileChange(absoluteFilePath, current, previous) {
 }
 
 // Monitor the directory
-watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
+watch.watchTree(dirPath, { interval: 1 }, async (f, curr, prev) => {
     //console.log(f, curr, prev);
     if (typeof f === "object") {
         // Initial scanning complete
