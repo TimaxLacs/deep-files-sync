@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 let files = {};
 
-const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-bv0ca02h7jr.ws-eu107.gitpod.io/gql';
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-75du848k2nh.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
 
 const token = process.argv[2];
@@ -34,9 +34,8 @@ const makeDeepClient = token => {
       ssl: !!+GQL_SSL,
       token
     })
-  
     const deepClient = new DeepClient({ apolloClient, linkId, token })
-    console.log(deepClient);
+    //console.log(deepClient);
     return deepClient
   }
   
@@ -48,7 +47,7 @@ async function addedTextLinks(fileData, deep){
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
     console.log(syncTextFile);
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
-    console.log(fileData);
+    //console.log(fileData);
     return syncTextFile;
 }
 async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
@@ -59,7 +58,7 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     type_id: containTypeId,
     to_id: syncTextFile?.id,
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
-    console.log(spaceIdArgument);
+    //console.log(spaceIdArgument);
 }
 
 // Handle events
