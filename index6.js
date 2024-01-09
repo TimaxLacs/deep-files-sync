@@ -25,7 +25,7 @@ let pendingRenames = {};
 
 
 
-const makeDeepClient = async token => {
+const makeDeepClient = token => {
     if (!token) throw new Error("No token provided")
     const decoded = parseJwt(token)
     const linkId = decoded?.userId
@@ -66,7 +66,7 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
 }
 
 // Handle events
-function handleFileChange(absoluteFilePath, current, previous) {
+async function handleFileChange(absoluteFilePath, current, previous) {
     let currentFileName = path.basename(absoluteFilePath);
     // if file added
     if (previous === null) {
@@ -90,8 +90,8 @@ function handleFileChange(absoluteFilePath, current, previous) {
                 const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
                 files[absoluteFilePath] = fileData;
 
-                const syncTextFile = addedTextLinks(fileData, deepClient);
-                addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
+                const syncTextFile = await addedTextLinks(fileData, deepClient);
+                await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
 
                 //console.log(`File ${currentFileName} added`);
                 //console.log(JSON.stringify(files, null, 2));
@@ -142,7 +142,7 @@ watch.watchTree(dirPath, { interval: 1 }, async (f, curr, prev) => {
         console.log(`Files initialized `);
         console.log(JSON.stringify(files, null, 2));
     } else {
-        handleFileChange(f, curr, prev);
+        await handleFileChange(f, curr, prev);
     }
 });
 
