@@ -2,6 +2,8 @@
 import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
 import { generateApolloClient } from "@deep-foundation/hasura/client.js";
 import { createRequire } from "module";
+import { generateMutation, generateSerial } from '@deep-foundation/deeplinks/imports/gql/index.js';
+
 import _ from 'lodash';
 
 let deepClient = {};
@@ -38,18 +40,13 @@ const makeDeepClient = token => {
     //console.log(deepClient);
     return deepClient
   }
-  
 
 async function addedTextLinks(fileData, deep){
-    console.log(11111111111111111111111111111);
     const syncTextFileTypeId = await deep.id('@deep-foundation/core', 'SyncTextFile');
-    console.log(22222222222222222222222222222);
-    console.log(syncTextFileTypeId);
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
-    console.log(33333333333333333333333333333);
-    console.log(syncTextFile);
+    //console.log(syncTextFile);
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
     //console.log(fileData);
     return syncTextFile;
@@ -64,6 +61,19 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
     //console.log(spaceIdArgument);
 }
+
+async function deleteLink(currentFileName){
+    console.log(currentFileName);
+    return await generateSerial({
+      actions: [
+        generateMutation({
+          tableName: 'links', operation: 'delete',
+          variables: { where: { currentFileName: { _eq: currentFileName } } },
+        }),
+      ],
+      name: 'DELETE_LINK',
+    });
+  }
 
 // Handle events
 async function handleFileChange(absoluteFilePath, current, previous) {
@@ -109,9 +119,9 @@ async function handleFileChange(absoluteFilePath, current, previous) {
             if (pendingRenames[previous.ino]) {
                 delete pendingRenames[previous.ino];
                 delete files[absoluteFilePath];
-
-                console.log(`File ${currentFileName} removed`);
-                console.log(JSON.stringify(files, null, 2));
+                deleteLink(currentFileName);
+                //console.log(`File ${currentFileName} removed`);
+                //console.log(JSON.stringify(files, null, 2));
             }
         }, 100);
         // }
