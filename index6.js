@@ -5,13 +5,13 @@ import { createRequire } from "module";
 import { generateMutation, generateSerial, deleteMutation } from '@deep-foundation/deeplinks/imports/gql/index.js';
 
 import _ from 'lodash';
-
 let deepClient = {};
 const require = createRequire(import.meta.url);
 const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
 let files = {};
+
 
 const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-75du848k2nh.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
@@ -62,17 +62,19 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     //console.log(spaceIdArgument);
 }
 
-async function deleteLink(currentFileName){
-    //console.log(currentFileName);
-    return await generateSerial({
-      actions: [
-        generateMutation({
-          tableName: 'links', operation: 'delete',
-          variables: { where: { currentFileName: { _eq: currentFileName } } },
-        }),
-      ],
-      name: 'DELETE_LINK',
-    });
+async function deleteLink(containTypeId, syncTextFile, deep){
+    console.log(containTypeId, syncTextFile)
+    await deep.delete({
+        _or: [
+          {
+            id: syncTextFile,
+          },
+          {
+            type_id: containTypeId,
+            to_id: syncTextFile
+          }
+        ]
+      });
   } 
 
 
@@ -117,7 +119,7 @@ async function handleFileChange(absoluteFilePath, current, previous) {
                 files[absoluteFilePath] = fileData;
 
                 const syncTextFile = await addedTextLinks(fileData, deepClient);
-                await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
+                const containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
 
                 //console.log(`File ${currentFileName} added`);
                 //console.log(JSON.stringify(files, null, 2));
@@ -135,7 +137,8 @@ async function handleFileChange(absoluteFilePath, current, previous) {
             if (pendingRenames[previous.ino]) {
                 delete pendingRenames[previous.ino];
                 delete files[absoluteFilePath];
-                deleteLink(currentFileName);
+
+                deleteLink(containTypeId, syncTextFile, deepClient);
                 //console.log(`File ${currentFileName} removed`);
                 //console.log(JSON.stringify(files, null, 2));
             }
