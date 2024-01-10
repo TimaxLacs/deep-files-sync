@@ -11,9 +11,10 @@ const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
 let files = {};
+let containTypeId;
+let syncTextFile;
 
-
-const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-75du848k2nh.ws-eu107.gitpod.io/gql';
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-5jg1c0gew5g.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
 
 const token = process.argv[2];
@@ -41,12 +42,12 @@ const makeDeepClient = token => {
     return deepClient
   }
 
-async function addedTextLinks(fileData, deep){
+
+  async function addedTextLinks(fileData, deep){
     const syncTextFileTypeId = await deep.id('@deep-foundation/core', 'SyncTextFile');
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
-    //console.log(syncTextFile);
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
     //console.log(fileData);
     return syncTextFile;
@@ -60,23 +61,38 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     to_id: syncTextFile?.id,
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
     //console.log(spaceIdArgument);
+    return containTypeId;
 }
 
-async function deleteLink(containTypeId, syncTextFile, deep){
-    console.log(containTypeId, syncTextFile)
+async function deleteLinks(containTypeId, syncTextFile, deep){
+    const syncTextFileId = syncTextFile.id;
+    console.log(containTypeId, syncTextFileId);
     await deep.delete({
         _or: [
           {
-            id: syncTextFile,
+            id: syncTextFile.id,   
           },
           {
             type_id: containTypeId,
-            to_id: syncTextFile
+            to_id: syncTextFile.id
           }
         ]
       });
   } 
 
+async function updateLinkValue(syncTextFile, value, deep){
+    await deep.update(
+        {
+          link_id: syncTextFile
+        },
+        {
+          value: value
+        },
+        {
+          table: (typeof value) + 's'
+        }
+      )      
+}
 
 /*
 async function deleteLink(currentFileName){
@@ -118,8 +134,8 @@ async function handleFileChange(absoluteFilePath, current, previous) {
                 const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
                 files[absoluteFilePath] = fileData;
 
-                const syncTextFile = await addedTextLinks(fileData, deepClient);
-                const containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
+                syncTextFile = await addedTextLinks(fileData, deepClient);
+                containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
 
                 //console.log(`File ${currentFileName} added`);
                 //console.log(JSON.stringify(files, null, 2));
@@ -138,7 +154,7 @@ async function handleFileChange(absoluteFilePath, current, previous) {
                 delete pendingRenames[previous.ino];
                 delete files[absoluteFilePath];
 
-                deleteLink(containTypeId, syncTextFile, deepClient);
+                deleteLinks(containTypeId, syncTextFile, deepClient);
                 //console.log(`File ${currentFileName} removed`);
                 //console.log(JSON.stringify(files, null, 2));
             }
@@ -148,7 +164,7 @@ async function handleFileChange(absoluteFilePath, current, previous) {
         // file changed
         const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
         files[absoluteFilePath] = fileData;
-
+        updateLinkValue(syncTextFile, files[absoluteFilePath], deepClient);
         console.log(`File ${currentFileName} changed`);
         console.log(JSON.stringify(files, null, 2));
     }
