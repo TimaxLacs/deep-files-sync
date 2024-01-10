@@ -2,7 +2,7 @@
 import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
 import { generateApolloClient } from "@deep-foundation/hasura/client.js";
 import { createRequire } from "module";
-import { generateMutation, generateSerial } from '@deep-foundation/deeplinks/imports/gql/index.js';
+import { generateMutation, generateSerial, deleteMutation } from '@deep-foundation/deeplinks/imports/gql/index.js';
 
 import _ from 'lodash';
 
@@ -63,7 +63,7 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
 }
 
 async function deleteLink(currentFileName){
-    console.log(currentFileName);
+    //console.log(currentFileName);
     return await generateSerial({
       actions: [
         generateMutation({
@@ -73,7 +73,23 @@ async function deleteLink(currentFileName){
       ],
       name: 'DELETE_LINK',
     });
-  }
+  } 
+
+
+/*
+async function deleteLink(currentFileName){
+    //console.log(currentFileName);
+    return await deleteMutation('links', {
+        where: {
+        currentFileName: {
+            _eq: currentFileName
+        }
+        }
+    }, {
+        returning: 'id, currentFileName'
+    });
+}
+  */
 
 // Handle events
 async function handleFileChange(absoluteFilePath, current, previous) {
