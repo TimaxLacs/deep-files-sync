@@ -13,7 +13,7 @@ let files = {};
 let containTypeId;
 let syncTextFile;
 
-const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-g1tf98z5qdl.ws-eu107.gitpod.io/gql';
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-p3yql9rnjjg.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
 
 const token = process.argv[2];
@@ -62,7 +62,8 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     type_id: containTypeId,
     to_id: syncTextFile?.id,
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
-    return containTypeId;
+    console.log(containTypeId, spaceContainSyncTextFile)
+    return spaceContainSyncTextFile.id;
 }
 
 async function deleteLinks(ino, deep){
@@ -81,7 +82,6 @@ async function deleteLinks(ino, deep){
               }
             ]
           });
-        delete addedFiles[ino];
     }
 } 
 
@@ -106,11 +106,13 @@ async function updateLinkValue(ino, value, deep){
 async function updateLinkName(ino, name, deep){
     const fileData = addedFiles[ino];
     if (fileData) {
-        const {containTypeId, syncTextFile} = fileData;
-        console.log(containTypeId+1)
+        console.log(fileData)
+        //const {syncTextFile, contain} = fileData;
+        const contain = fileData.containTypeId
+        console.log(contain)
         await deep.update(
             {
-              link_id: containTypeId+1
+              link_id: contain
             },
             {
               value: name
@@ -120,7 +122,8 @@ async function updateLinkName(ino, name, deep){
             }
           )  
     }
-} 
+}
+
 
 async function handleFileChange(absoluteFilePath, current, previous) {
     let currentFileName = path.basename(absoluteFilePath);
@@ -136,8 +139,8 @@ async function handleFileChange(absoluteFilePath, current, previous) {
                 delete files[previousAbsoluteFilePath];
                 files[absoluteFilePath] = fileData;
                 delete pendingRenames[current.ino];
-                console.log(`File ${previousFileName} renamed to ${currentFileName}`);
-                console.log(JSON.stringify(files, null, 2));
+                //console.log(`File ${previousFileName} renamed to ${currentFileName}`);
+                //console.log(JSON.stringify(files, null, 2));
                 updateLinkName(current.ino, currentFileName, deepClient);
             }
             else {
