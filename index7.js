@@ -13,7 +13,7 @@ let files = {};
 let containTypeId;
 let syncTextFile;
 
-const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-wjf6bqdfybq.ws-eu107.gitpod.io/gql';
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-g1tf98z5qdl.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
 
 const token = process.argv[2];
@@ -103,51 +103,79 @@ async function updateLinkValue(ino, value, deep){
     }
 }
 
+async function updateLinkName(ino, name, deep){
+    const fileData = addedFiles[ino];
+    if (fileData) {
+        const {containTypeId, syncTextFile} = fileData;
+        console.log(containTypeId+1)
+        await deep.update(
+            {
+              link_id: containTypeId+1
+            },
+            {
+              value: name
+            },
+            {
+              table: `strings`
+            }
+          )  
+    }
+} 
+
 async function handleFileChange(absoluteFilePath, current, previous) {
     let currentFileName = path.basename(absoluteFilePath);
-    // if file addedif (previous === null) {
-    if (files[absoluteFilePath] === undefined) {
-        // проверка идентификатора --> rename или add
-        if (pendingRenames[current.ino]) {
-            const previousAbsoluteFilePath = pendingRenames[current.ino];
-            const previousFileName = path.basename(previousAbsoluteFilePath);
-            const fileData = files[previousAbsoluteFilePath];
+    // if file added
+    if (previous === null) {
+        if (files[absoluteFilePath] === undefined) {
+            // проверка идентификатора --> rename или add
+            if (pendingRenames[current.ino]) {
+                const previousAbsoluteFilePath = pendingRenames[current.ino];
+                const previousFileName = path.basename(previousAbsoluteFilePath);
+                const fileData = files[previousAbsoluteFilePath];
 
-            delete files[previousAbsoluteFilePath];
-            files[absoluteFilePath] = fileData;
-            delete pendingRenames[current.ino];
+                delete files[previousAbsoluteFilePath];
+                files[absoluteFilePath] = fileData;
+                delete pendingRenames[current.ino];
+                console.log(`File ${previousFileName} renamed to ${currentFileName}`);
+                console.log(JSON.stringify(files, null, 2));
+                updateLinkName(current.ino, currentFileName, deepClient);
+            }
+            else {
+                const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
+                files[absoluteFilePath] = fileData;
+
+                const syncTextFile = await addedTextLinks(fileData, deepClient);
+                const containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
+                addedFiles[current.ino] = {syncTextFile, containTypeId};
+                console.log(`File ${currentFileName} added`);
+                console.log(JSON.stringify(files, null, 2));
+            }
         }
-        else {
+    } else if (current.nlink === 0) {
+        // file removed
+        pendingRenames[previous.ino] = absoluteFilePath;
+        setTimeout(() => {
+            if (pendingRenames[previous.ino]) {
+                delete pendingRenames[previous.ino];
+                delete files[absoluteFilePath];
+
+                deleteLinks(previous.ino, deepClient);
+                console.log(`File ${currentFileName} removed`);
+                console.log(JSON.stringify(files, null, 2));
+            }
+        }, 100);
+    } else {
+        // file changed
+        if (files[absoluteFilePath] !== undefined) {
             const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
             files[absoluteFilePath] = fileData;
-
-            const syncTextFile = await addedTextLinks(fileData, deepClient);
-            const containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
-            addedFiles[current.ino] = {syncTextFile, containTypeId};
-        }
-    }
- else if (current.nlink === 0) {
-    // file removed
-    pendingRenames[previous.ino] = absoluteFilePath;
-    setTimeout(() => {
-        if (pendingRenames[previous.ino]) {
-            delete pendingRenames[previous.ino];
-            delete files[absoluteFilePath];
-
-            deleteLinks(previous.ino, deepClient);
-            console.log(`File ${currentFileName} removed`);
+            updateLinkValue(current.ino, files[absoluteFilePath], deepClient);
+            console.log(`File ${currentFileName} changed`);
             console.log(JSON.stringify(files, null, 2));
         }
-    }, 100);
-} else {
-    // file changed
-    const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
-    files[absoluteFilePath] = fileData;
-    updateLinkValue(current.ino, files[absoluteFilePath], deepClient);
-    console.log(`File ${currentFileName} changed`);
-    console.log(JSON.stringify(files, null, 2));
+    }
 }
-}
+
 
 
 watch.watchTree(dirPath, { interval: 1 }, async (f, curr, prev) => {
