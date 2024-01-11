@@ -14,7 +14,7 @@ let files = {};
 let containTypeId;
 let syncTextFile;
 
-const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-5jg1c0gew5g.ws-eu107.gitpod.io/gql';
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-wjf6bqdfybq.ws-eu107.gitpod.io/gql';
 const GQL_SSL = process.env.GQL_SSL || 1;
 
 const token = process.argv[2];
@@ -49,7 +49,6 @@ const makeDeepClient = token => {
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
-    //console.log(fileData);
     return syncTextFile;
 }
 async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
@@ -60,7 +59,6 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     type_id: containTypeId,
     to_id: syncTextFile?.id,
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
-    //console.log(spaceIdArgument);
     return containTypeId;
 }
 
@@ -81,15 +79,17 @@ async function deleteLinks(containTypeId, syncTextFile, deep){
   } 
 
 async function updateLinkValue(syncTextFile, value, deep){
+    const syncTextFileId = syncTextFile.id;
+    console.log(syncTextFileId, value);
     await deep.update(
         {
-          link_id: syncTextFile
+          link_id: syncTextFileId
         },
         {
           value: value
         },
         {
-          table: (typeof value) + 's'
+          table: `strings`
         }
       )      
 }
@@ -137,8 +137,8 @@ async function handleFileChange(absoluteFilePath, current, previous) {
                 syncTextFile = await addedTextLinks(fileData, deepClient);
                 containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
 
-                //console.log(`File ${currentFileName} added`);
-                //console.log(JSON.stringify(files, null, 2));
+                console.log(`File ${currentFileName} added`);
+                console.log(JSON.stringify(files, null, 2));
             }
         }
 
