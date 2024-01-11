@@ -1,23 +1,22 @@
-#!/usr/bin/env node
 import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
 import { generateApolloClient } from "@deep-foundation/hasura/client.js";
-import { gql } from '@apollo/client/index.js';
 import { createRequire } from "module";
+import { generateMutation, generateSerial, deleteMutation } from '@deep-foundation/deeplinks/imports/gql/index.js';
+
 import _ from 'lodash';
-import { assert } from 'chai';
-
-
-
+let deepClient = {};
 const require = createRequire(import.meta.url);
 const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
 let files = {};
-let inodeMap = {};
+let containTypeId;
+let syncTextFile;
 
-const GQL_URN = process.env.GQL_URN 
-const GQL_SSL = process.env.GQL_SSL
-const graphQL = process.argv[2];
+const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-wjf6bqdfybq.ws-eu107.gitpod.io/gql';
+const GQL_SSL = process.env.GQL_SSL || 1;
+
+const token = process.argv[2];
 let dirPath = process.argv[3];
 const spaceIdArgument  = process.argv[4];
 
@@ -27,33 +26,35 @@ let pendingRenames = {};
 
 
 
-async function makeDeepClient(graphQL) {
-    const apolloClient = generateApolloClient({
-      path: process.env.NEXT_PUBLIC_GQL_PATH || graphQL, // <<= HERE PATH TO UPDATE
-      ssl: !!~process.env.NEXT_PUBLIC_GQL_PATH.indexOf('localhost')
-        ? false
-        : true,
-    });
-    const unloginedDeep = new DeepClient({ apolloClient });
-    const guest = await unloginedDeep.guest();
-    const guestDeep = new DeepClient({ deep: unloginedDeep, ...guest });
-    const admin = await guestDeep.login({
-        linkId: await guestDeep.id('deep', 'admin'),
-    });
-    const deep = new DeepClient({ deep: guestDeep, ...admin });
-}
 
-async function addedTextLinks(fileData){
+const makeDeepClient = token => {
+    if (!token) throw new Error("No token provided")
+    const decoded = parseJwt(token)
+    const linkId = decoded?.userId
+    const apolloClient = generateApolloClient({
+      path: GQL_URN,
+      ssl: !!+GQL_SSL,
+      token
+    })
+    const deepClient = new DeepClient({ apolloClient, linkId, token })
+    //console.log(deepClient);
+    return deepClient
+  }
+
+
+// Сохраняем ссылки на все добавленные файлы и их связи
+let addedFiles = {};
+
+async function addedTextLinks(fileData, deep){
     const syncTextFileTypeId = await deep.id('@deep-foundation/core', 'SyncTextFile');
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
-    console.log(syncTextFile);
     const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
-    console.log(fileData);
     return syncTextFile;
 }
-async function addedContainLinks(spaceIdArgument, syncTextFile){
+
+async function addedContainLinks(spaceIdArgument, syncTextFile, deep){
     const spaceId = spaceIdArgument || (await deep.id('deep', 'admin'));
     const containTypeId = await deep.id('@deep-foundation/core', 'Contain');
     const spaceContainSyncTextFile = (await deep.insert({
@@ -61,75 +62,99 @@ async function addedContainLinks(spaceIdArgument, syncTextFile){
     type_id: containTypeId,
     to_id: syncTextFile?.id,
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
-    console.log(spaceIdArgument);
+    return containTypeId;
 }
 
-// Handle events
-function handleFileChange(absoluteFilePath, current, previous) {
-    let currentFileName = path.basename(absoluteFilePath);
-    // if file added
-    if (previous === null) {
-        //проверка наличия файла по его абсолютному пути
-        if (files[absoluteFilePath] === undefined) {
-            // проверка идентификатора
-            if (pendingRenames[current.ino]) {
+async function deleteLinks(ino, deep){
+    const fileData = addedFiles[ino];
+    if (fileData) {
+        const {containTypeId, syncTextFile} = fileData;
+        console.log(syncTextFile, syncTextFile.id)
+        await deep.delete({
+            _or: [
+              {
+                id: syncTextFile.id,   
+              },
+              {
+                type_id: containTypeId,
+                to_id: syncTextFile.id
+              }
+            ]
+          });
+        delete addedFiles[ino];
+    }
+} 
 
-                const previousAbsoluteFilePath = pendingRenames[current.ino];
-                const previousFileName = path.basename(previousAbsoluteFilePath);
-                const fileData = files[previousAbsoluteFilePath];
-
-                delete files[previousAbsoluteFilePath];
-                files[absoluteFilePath] = fileData;
-                delete pendingRenames[current.ino];
-
-                console.log(`File ${previousFileName} renamed to ${currentFileName}`);
-                console.log(JSON.stringify(files, null, 2));
+async function updateLinkValue(ino, value, deep){
+    const fileData = addedFiles[ino];
+    if (fileData) {
+        const {syncTextFile} = fileData;
+        await deep.update(
+            {
+              link_id: syncTextFile.id
+            },
+            {
+              value: value
+            },
+            {
+              table: `strings`
             }
-            else {
-                const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
-                files[absoluteFilePath] = fileData;
-
-                const syncTextFile = addedTextLinks(fileData);
-                addedContainLinks(spaceIdArgument, syncTextFile);
-
-                //console.log(`File ${currentFileName} added`);
-                //console.log(JSON.stringify(files, null, 2));
-            }
-        }
-
-
-    } else if (current.nlink === 0) {
-        // file removed
-        //if (inodeMap[prev.ino]) {
-        // wait a moment to see if this inode comes back (rename)
-        pendingRenames[previous.ino] = absoluteFilePath;
-        //delete inodeMap[prev.ino];
-        setTimeout(() => {
-            if (pendingRenames[previous.ino]) {
-                delete pendingRenames[previous.ino];
-                delete files[absoluteFilePath];
-
-                console.log(`File ${currentFileName} removed`);
-                console.log(JSON.stringify(files, null, 2));
-            }
-        }, 100);
-        // }
-    } else {
-        // file changed
-        const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
-        files[absoluteFilePath] = fileData;
-
-        console.log(`File ${currentFileName} changed`);
-        console.log(JSON.stringify(files, null, 2));
+          )      
     }
 }
 
-// Monitor the directory
-watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
+async function handleFileChange(absoluteFilePath, current, previous) {
+    let currentFileName = path.basename(absoluteFilePath);
+    // if file addedif (previous === null) {
+    if (files[absoluteFilePath] === undefined) {
+        // проверка идентификатора --> rename или add
+        if (pendingRenames[current.ino]) {
+            const previousAbsoluteFilePath = pendingRenames[current.ino];
+            const previousFileName = path.basename(previousAbsoluteFilePath);
+            const fileData = files[previousAbsoluteFilePath];
+
+            delete files[previousAbsoluteFilePath];
+            files[absoluteFilePath] = fileData;
+            delete pendingRenames[current.ino];
+        }
+        else {
+            const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
+            files[absoluteFilePath] = fileData;
+
+            const syncTextFile = await addedTextLinks(fileData, deepClient);
+            const containTypeId = await addedContainLinks(spaceIdArgument, syncTextFile, deepClient);
+            addedFiles[current.ino] = {syncTextFile, containTypeId};
+        }
+    }
+ else if (current.nlink === 0) {
+    // file removed
+    pendingRenames[previous.ino] = absoluteFilePath;
+    setTimeout(() => {
+        if (pendingRenames[previous.ino]) {
+            delete pendingRenames[previous.ino];
+            delete files[absoluteFilePath];
+
+            deleteLinks(previous.ino, deepClient);
+            console.log(`File ${currentFileName} removed`);
+            console.log(JSON.stringify(files, null, 2));
+        }
+    }, 100);
+} else {
+    // file changed
+    const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
+    files[absoluteFilePath] = fileData;
+    updateLinkValue(current.ino, files[absoluteFilePath], deepClient);
+    console.log(`File ${currentFileName} changed`);
+    console.log(JSON.stringify(files, null, 2));
+}
+}
+
+
+watch.watchTree(dirPath, { interval: 1 }, async (f, curr, prev) => {
     //console.log(f, curr, prev);
     if (typeof f === "object") {
         // Initial scanning complete
-        makeDeepClient(graphQL);
+        deepClient = makeDeepClient(token);
         const filesStats = f;
         Object.keys(filesStats).forEach(fileName => {
             if (fileName == dirPath) {
@@ -141,8 +166,6 @@ watch.watchTree(dirPath, { interval: 1 }, (f, curr, prev) => {
         console.log(`Files initialized `);
         console.log(JSON.stringify(files, null, 2));
     } else {
-        handleFileChange(f, curr, prev);
+        await handleFileChange(f, curr, prev);
     }
 });
-
-
