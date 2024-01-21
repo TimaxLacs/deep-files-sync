@@ -13,13 +13,36 @@ let files = {};
 let containTypeId;
 let syncTextFile;
 
-const GQL_URN = process.env.GQL_URN || '3006-deepfoundation-dev-wlfnux2rjvt.ws-eu107.gitpod.io/gql';
-const GQL_SSL = process.env.GQL_SSL || 1;
+
 
 const token = process.argv[2];
 let dirPath = process.argv[3];
 const spaceIdArgument  = process.argv[4];
-dirPath = '\\Users\\samsung\\Deep.project\\sync-file\\deep-files-sync\\dirPath\\'; // Your directory path
+let urn = process.argv[5];
+let ssl;
+
+
+const url_protocol = urn.match(/^(http:|https:)/)[0];
+if (url_protocol === "https:") {
+  ssl = true;
+} else if (url_protocol === "http:") {
+  ssl = false;
+} else {
+  throw new Error(`Unsupported protocol: ${url.protocol}`);
+}
+
+
+if (!urn.endsWith("/gql")) {
+  urn += "/gql";
+}
+urn = urn.replace(/^https:\/\//, "");
+urn.replace(/^http:\/\//, "");
+
+
+const GQL_URN = process.env.GQL_URN || urn
+const GQL_SSL = process.env.GQL_SSL || ssl;
+
+
 let pendingRenames = {};
 
 const makeDeepClient = token => {
