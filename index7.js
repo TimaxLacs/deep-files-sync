@@ -6,6 +6,7 @@ import { generateMutation, generateSerial, deleteMutation } from '@deep-foundati
 import _ from 'lodash';
 let deepClient = {};
 const require = createRequire(import.meta.url);
+const { program } = require('commander')
 const watch = require('watch');
 const fs = require('fs');
 const path = require('path');
@@ -188,7 +189,7 @@ async function handleFileChange(absoluteFilePath, current, previous) {
                 delete pendingRenames[previous.ino];
                 delete files[absoluteFilePath];
                 
-                deleteLinks(containTypeId, currentFileName, deepClient);
+                deleteLinks(3, currentFileName, deepClient);
                 //console.log(`File ${currentFileName} removed`);
                 //console.log(JSON.stringify(files, null, 2));
             }
