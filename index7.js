@@ -80,7 +80,9 @@ async function deleteLinks(containTypeId, fileName, deep){
       });
   } 
 
-async function updateLinkValue(value, deep, containTypeId, fileName){
+async function updateLinkValue(valueText, deep, containTypeId, fileName){
+  fileName = fileName.replace(/\.txt/g, "");
+  console.log(valueText);
   const { data } = await deep.select({ 
     in: {
                 type_id: containTypeId,
@@ -88,32 +90,31 @@ async function updateLinkValue(value, deep, containTypeId, fileName){
     }
       });
    const syncTextFile = data[0];
+   console.log(syncTextFile, valueText);
     await deep.update(
         {
-          link_id: syncTextFile
+          link_id: syncTextFile.id
         },
         {
-          value: value
+          value: valueText
         },
         {
-          table: (typeof value) + 's'
+          table: (typeof valueText) + 's'
         }
       )      
 }
 
 async function updateLinkName(deep, containTypeId, fileName, newName){
-  console.log(containTypeId, fileName);
+  fileName = fileName.replace(/\.txt/g, "");
   const { data } = await deep.select({ 
-    
-                type_id: containTypeId,
-                string: { value: { _eq: fileName } }
-    }
-      );
-   console.log(data);
+      type_id: containTypeId,
+      string: { value: { _eq: fileName } }
+});
    const syncTextFile = data[0];
+   console.log(containTypeId, fileName);
     await deep.update(
         {
-          link_id: syncTextFile
+          link_id: syncTextFile.id
         },
         {
           value: newName
@@ -174,7 +175,7 @@ async function handleFileChange(absoluteFilePath, current, previous) {
         // file changed
         const fileData = fs.readFileSync(absoluteFilePath, { encoding: 'utf8' });
         files[absoluteFilePath] = fileData;
-        updateLinkValue(files[absoluteFilePath], deepClient, containTypeId, currentFileName);
+        updateLinkValue(fileData, deepClient, 3, currentFileName);
         console.log(`File ${currentFileName} changed`);
         console.log(JSON.stringify(files, null, 2));
     }
