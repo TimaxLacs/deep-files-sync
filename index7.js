@@ -49,7 +49,7 @@ let pendingRenames = {};
 const makeDeepClient = token => {
     if (!token) throw new Error("No token provided")
     const decoded = parseJwt(token)
-    const linkId = decoded?.userId
+    const linkId = decoded.userId
     const apolloClient = generateApolloClient({
       path: GQL_URN,
       ssl: !!+GQL_SSL,
@@ -64,7 +64,7 @@ const makeDeepClient = token => {
     const syncTextFile = (await deep.insert({
     type_id: syncTextFileTypeId,
     }, { name: 'INSERT_HANDLER_SYNC_TEXT_FILE' })).data[0];
-    const syncTextFileValue = (await deep.insert({ link_id: syncTextFile?.id, value: fileData }, { table: 'strings' })).data[0];
+    const syncTextFileValue = (await deep.insert({ link_id: syncTextFile.id, value: fileData }, { table: 'strings' })).data[0];
     //console.log(fileData);
     return syncTextFile;
 }
@@ -75,7 +75,7 @@ async function addedContainLinks(spaceIdArgument, syncTextFile, deep, fileName){
     from_id: spaceId,
     type_id: containTypeId,
     string: { data: { value: fileName } },
-    to_id: syncTextFile?.id,
+    to_id: syncTextFile.id,
     }, { name: 'INSERT_SYNC_TEXT_FILE_CONTAIN' })).data[0];
     //console.log(spaceIdArgument, spaceContainSyncTextFile);
     return containTypeId;
