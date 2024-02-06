@@ -5,7 +5,7 @@ Synchronizing text files in a folder on the local computer with Deep instance.
 
 Installation:
 ```
-npm install -g deep-file-sync
+npm install -g deep-files-sync
 ```
 Usage:
 ```
