@@ -8,8 +8,12 @@
         "deep-files-sync": "./index.js"
     },
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test1": "echo \"Error: no test specified\" && exit 1",
+        "test2": "jest"
     },
+    "jest": {
+        "verbose": true
+      },
     "author": "Timax",
     "license": "Unlicense",
     "dependencies": {
