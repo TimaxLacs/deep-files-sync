@@ -85,8 +85,6 @@ const createFile = (filePath, content = '') => {
         fs.writeFileSync(filePath, content, { flag: 'w' });
     }
 }
-
-
 const createDirectory = (directoryPath) => {
    if (!fs.existsSync(directoryPath)) {
        fs.mkdirSync(directoryPath, { recursive: true });
@@ -94,12 +92,11 @@ const createDirectory = (directoryPath) => {
 
 };
 
-
-
 const getIdFromFolderName = (folderPath) => {
     const folderName = path.basename(folderPath); 
     return folderName.split('__')[0]; 
 };
+
 
 const generateFirstDirStruct = (arrayLink, baseDir) => {
    const idInFolder = getIdFromFolderName(baseDir);
@@ -137,10 +134,6 @@ const generateFirstDirStruct = (arrayLink, baseDir) => {
         newRec2(arrayLink[0].return, objLink, linkDir)
     }
 };
-
-
-
-
 
 
 const newRec1 = (returnPath) => {
@@ -192,31 +185,23 @@ const newRec2 = (returnPath, arrayLink, baseDir) => {
 
 
 const processResult = (resultData, data, currentDir) => {
-
    let transformedObject = {};
    let pathList = []; 
    let relationPath;
    // Проверяем, есть ли поля return
    resultData = [resultData]
-   console.log(resultData, 'resultData')
-   //console.log(resultData[0].return, 'resultData[0].return')
+   console.log(resultData, 'resultData333333')
    if (resultData[0].return !== undefined) { //если в eval есть запрос с наличием relation и return
-    //console.log(resultData[0].data, '11111111')
       generateFirstDirStruct(resultData, currentDir)
-      //newRec2(resultData[0].return, resultData[0].data, baseDir);
-  } else if (resultData[0].return === undefined){ //если в eval обычный запрос типа deep.Traveler
-        console.log(resultData[0].data, '222222')
-        for(let link in resultData[0].data){
-            //console.log(resultData[0].data[link], '222222')
-            let newLinkDir = path.join(currentDir, `${resultData[0].data[link].id}__${resultData[0].data[link].type_id}`); 
+  } else { //если в eval обычный запрос типа deep.Traveler
+        for(let link in resultData[0]){
+            let newLinkDir = path.join(currentDir, `${resultData[0][link].id}__${resultData[0][link].type_id}`); 
             createDirectory(newLinkDir); 
         }
             relationPath = data.match(/\.([a-zA-Z]+)\(/g) || [];
             relationPath = relationPath.map(match => match.substring(1, match.length - 1))
                 .filter(key => !['item', 'return', 'Traveler', 'select'].includes(key));
    }  
-   //console.log(relationPath, 'relationPath')
-   // Создаем объект по извлеченным связям
 
    return transformedObject;
 };
@@ -254,17 +239,21 @@ const saveSubscriptionData = async (data, currentDir) => {
             createFile(path.join(currentDir, 'eval.js'));
             return;
         }
-        console.log('Executing eval.js with data:', data);
-
         try {
-            // Выполнить асинхронный код из eval.js
             const result = await executeAsync(data);
 
             // Обработка результата
             if (result && typeof result.subscribe === 'function') {
+                //console.log(result, 'result')
                 await handleSubscription(result, currentDir, data);
             } else {
-                processResult(result, data, currentDir);
+                if (result && result.data) {
+                    // Обработка данных из обычного запроса
+                    const processedData = result; // Пример извлечения данных
+                    processResult(processedData, data, currentDir);
+                } else {
+                    console.log('Нет данных для обработки в обычном запросе:', result);
+                }
             }
         } catch (error) {
             console.error('Ошибка при выполнении eval.js:', error);
@@ -277,9 +266,8 @@ const saveSubscriptionData = async (data, currentDir) => {
 const executeAsync = async (code) => {
     return new Promise((resolve, reject) => {
         try {
-            // Исполняем код непосредственно с помощью eval
             const func = async () => {
-                return await eval(code); // Здесь используется eval, что рискованно
+                return await eval(code);
             };
             resolve(func());
         } catch (err) {
@@ -288,16 +276,26 @@ const executeAsync = async (code) => {
     });
 };
 
-// Обработка подписок
+
+
 const handleSubscription = async (subscription, currentDir, data) => {
     const subFilePath = await saveSubscriptionData(data, currentDir);
     if (subFilePath) {
         const subscriptionHandler = subscription.subscribe({
             next: async (links) => {
-                const processedLinks = processResult(links, data, currentDir);
-                console.log('Обновленная структура после подписки:', processedLinks);
+                console.log('Получены новые данные подписки:', links);
+
+                const processedLinks = Object.values(links).filter(link => link !== undefined); 
+                if (processedLinks.length) {
+                    handleSubscriptionResult(processedLinks, data, currentDir);
+                } else {
+                    // И здесь вы можете вызывать метод удаления при необходимости
+                    console.log('Обнаружено удаление связи.');
+                    // Добавьте логику для удаления, если нет новых данных
+                    processDeletion(data); // Пример функции, которая может обрабатывать удаление
+                }
             },
-            error: error => {
+            error: (error) => {
                 console.error('Ошибка подписки:', error);
             }
         });
@@ -314,10 +312,20 @@ const handleSubscription = async (subscription, currentDir, data) => {
     }
 };
 
+// Универсальная обработка результатов подписки
+const handleSubscriptionResult = (links, data, currentDir) => {    
+    const processedLinks = Object.values(links).filter(link => link !== undefined);
+    
+    // Логирование для проверки
+    console.log('Обработанные данные из подписки:', processedLinks);
+    
+    // Проверка на пустой массив
+    if (processedLinks.length === 0) {
+        console.warn('Нет данных для обработки из подписки.');
+    }
 
-
-
-
+    processResult(processedLinks, data, currentDir);
+};
 
 
 
