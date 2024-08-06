@@ -80,6 +80,8 @@ const makeDeepClient = token => {
     //console.log(deepClient);
     return deepClient
   }
+
+
   async function addedTextLinks(fileData, deep){
     const syncTextFileTypeId = await deep.id('@deep-foundation/core', 'SyncTextFile');
     const syncTextFile = (await deep.insert({
@@ -107,8 +109,8 @@ async function deleteLinks(containTypeId, fileName, deep){
     //console.log(containTypeId, fileName);
     const { data } = await deep.select({ 
       in: {
-                  type_id: containTypeId,
-                  string: { value: { _eq: fileName } }
+          type_id: containTypeId,
+          string: { value: { _eq: fileName } }
       }
         });
         const syncTextFile = data[0];
@@ -123,7 +125,7 @@ async function deleteLinks(containTypeId, fileName, deep){
           }
         ]
       });
-  } 
+} 
 
 async function updateLinkValue(valueText, deep, containTypeId, fileName){
   fileName = fileName.replace(/\.txt/g, "");
