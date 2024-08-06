@@ -97,11 +97,44 @@ const getIdFromFolderName = (folderPath) => {
     return folderName.split('__')[0]; 
 };
 
+const getLinkName = async (linkId) => {
+    const nameLink = await deep.select({
+        type_id: 3,
+        to_id: linkId,
+    });
 
-const generateFirstDirStruct = (arrayLink, baseDir) => {
+    if (nameLink.data.length > 0) {
+        if(nameLink.data[0].value == null) return undefined
+        return nameLink.data[0].value?.value;
+    }
+
+    return undefined;
+}
+
+const createValueFile = (link, directoryPath) => {
+    const valueFilePath = path.join(directoryPath, 'value.txt');
+
+    // Получаем значение из объекта связи
+    const valueContent = link.value !== null ? JSON.stringify(link.value.value) : 'null';
+
+    // Создаем файл value.txt и записываем в него значение
+    fs.writeFileSync(valueFilePath, valueContent, { flag: 'w' });
+    console.log(`Создан файл ${valueFilePath} с содержимым: ${valueContent}`);
+};
+
+const createDataFile = (link, directoryPath) => {
+    const dataFilePath = path.join(directoryPath, 'data.json');
+
+    // Создаем файл data.json и записываем в него значение
+    fs.writeFileSync(dataFilePath, JSON.stringify(link), { flag: 'w' });
+    console.log(`Создан файл ${dataFilePath} с содержимым: ${link}`);
+};
+
+
+const generateFirstDirStruct = async (arrayLink, baseDir) => {
    const idInFolder = getIdFromFolderName(baseDir);
    let linkDir;
-
+   let nameLink;
     for (let objLink of arrayLink[0].data) {
         for (let key in objLink) {
             if (objLink[key] === idInFolder) {
@@ -127,11 +160,18 @@ const generateFirstDirStruct = (arrayLink, baseDir) => {
             const relationTypeDir = path.join(baseDir, typeRelationDir);
             createDirectory(relationTypeDir);
             
-            linkDir = path.join(relationTypeDir, `${objLink.id}__${objLink.type_id}`);
+            nameLink = await getLinkName(objLink.id)
+            console.log(nameLink, 'nameLink')
+            if(nameLink == undefined || nameLink == null) linkDir = path.join(relationTypeDir, `${objLink.id}__${objLink.type_id}`);
+            else linkDir = path.join(relationTypeDir, `${objLink.id}__${nameLink}__${objLink.type_id}`);
+            
             createDirectory(linkDir);
+
+            createValueFile(objLink, linkDir)
+            createDataFile(objLink, linkDir)
         } else linkDir = baseDir
 
-        newRec2(arrayLink[0].return, objLink, linkDir)
+        await newRec2(arrayLink[0].return, objLink, linkDir)
     }
 };
 
@@ -158,8 +198,10 @@ const newRec1 = (returnPath) => {
 };
 
 
-const newRec2 = (returnPath, arrayLink, baseDir) => {
+const newRec2 = async (returnPath, arrayLink, baseDir) => {
     let data = newRec1(returnPath);
+    let nameLink;
+    let newLinkDir;
     if (data === undefined) return;
 
     let relationNewName = data[0];
@@ -172,10 +214,20 @@ const newRec2 = (returnPath, arrayLink, baseDir) => {
     if(typeof arrayLink === 'object') arrayLink = arrayLink[relationOldName]
 
     for(let i = 0; arrayLink.length > i; i++){
-      let newLinkDir = path.join(newDir, `${arrayLink[i].id}__${arrayLink[i].type_id}`); 
+
+      nameLink = await getLinkName(arrayLink[i].id)
+      console.log(nameLink, 'nameLink')
+      if(nameLink == undefined || nameLink == null) newLinkDir = path.join(newDir, `${arrayLink[i].id}__${arrayLink[i].type_id}`); 
+      else newLinkDir = path.join(newDir, `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}`); 
+
       createDirectory(newLinkDir); 
+      console.log(arrayLink[i], 'arrayLink[i]')
+      console.log(newLinkDir, 'newLinkDir')
+      createValueFile(arrayLink[i], newLinkDir)
+
+      createDataFile(arrayLink[i], newLinkDir)
       
-      newRec2(returnNewPath[relationOldName], arrayLink[i], newLinkDir)
+      await newRec2(returnNewPath[relationOldName], arrayLink[i], newLinkDir)
    }
 
 };
@@ -184,19 +236,33 @@ const newRec2 = (returnPath, arrayLink, baseDir) => {
 
 
 
-const processResult = (resultData, data, currentDir) => {
+const processResult = async (resultData, data, currentDir) => {
    let transformedObject = {};
-   let pathList = []; 
    let relationPath;
+   let nameLink;
+   let newLinkDir;
+   let linkList;
    // Проверяем, есть ли поля return
    resultData = [resultData]
    console.log(resultData, 'resultData333333')
    if (resultData[0].return !== undefined) { //если в eval есть запрос с наличием relation и return
       generateFirstDirStruct(resultData, currentDir)
   } else { //если в eval обычный запрос типа deep.Traveler
-        for(let link in resultData[0]){
-            let newLinkDir = path.join(currentDir, `${resultData[0][link].id}__${resultData[0][link].type_id}`); 
+        if(resultData[0].data === undefined) linkList = resultData[0]
+        else linkList = resultData[0].data
+        for(let link in linkList){
+            console.log(linkList, 'linkList')
+            nameLink = await getLinkName(linkList[link].id)
+            console.log(nameLink, 'nameLink')
+            if(nameLink == undefined || nameLink == null) newLinkDir = path.join(currentDir, `${linkList[link].id}__${linkList[link].type_id}`)
+            else newLinkDir = path.join(currentDir, `${linkList[link].id}__${nameLink}__${linkList[link].type_id}`)
             createDirectory(newLinkDir); 
+
+            console.log(linkList[link], 'linkList[link]')
+            console.log(newLinkDir, 'newLinkDir')
+            createValueFile(linkList[link], newLinkDir)
+
+            createDataFile(linkList[link], newLinkDir)
         }
             relationPath = data.match(/\.([a-zA-Z]+)\(/g) || [];
             relationPath = relationPath.map(match => match.substring(1, match.length - 1))
@@ -250,7 +316,7 @@ const saveSubscriptionData = async (data, currentDir) => {
                 if (result && result.data) {
                     // Обработка данных из обычного запроса
                     const processedData = result; // Пример извлечения данных
-                    processResult(processedData, data, currentDir);
+                    await processResult(processedData, data, currentDir);
                 } else {
                     console.log('Нет данных для обработки в обычном запросе:', result);
                 }
@@ -287,7 +353,7 @@ const handleSubscription = async (subscription, currentDir, data) => {
 
                 const processedLinks = Object.values(links).filter(link => link !== undefined); 
                 if (processedLinks.length) {
-                    handleSubscriptionResult(processedLinks, data, currentDir);
+                    await handleSubscriptionResult(processedLinks, data, currentDir);
                 } else {
                     // И здесь вы можете вызывать метод удаления при необходимости
                     console.log('Обнаружено удаление связи.');
@@ -313,7 +379,7 @@ const handleSubscription = async (subscription, currentDir, data) => {
 };
 
 // Универсальная обработка результатов подписки
-const handleSubscriptionResult = (links, data, currentDir) => {    
+const handleSubscriptionResult = async (links, data, currentDir) => {    
     const processedLinks = Object.values(links).filter(link => link !== undefined);
     
     // Логирование для проверки
@@ -324,7 +390,7 @@ const handleSubscriptionResult = (links, data, currentDir) => {
         console.warn('Нет данных для обработки из подписки.');
     }
 
-    processResult(processedLinks, data, currentDir);
+    await processResult(processedLinks, data, currentDir);
 };
 
 
