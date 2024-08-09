@@ -7,7 +7,7 @@ import { SubscriptionClient } from 'subscriptions-transport-ws';
 import ws from 'ws';
 import fs from 'fs';
 import path from 'path';
-import watch from 'watch';
+import chokidar from 'chokidar';
 
 let evalData = {}; // Объект для хранения данных удаленных файлов
 let subscriptionCount = 0;
@@ -93,7 +93,7 @@ const createDirectory = (directoryPath) => {
 };
 
 const getIdFromFolderName = (folderPath) => {
-    const folderName = path.basename(folderPath); 
+    const folderName = path1.basename(folderPath); 
     return folderName.split('__')[0]; 
 };
 
@@ -134,6 +134,41 @@ const createDataFile = (link, directoryPath) => {
 };
 
 
+
+const replaceFile = async(filedir, newFileContent) => {
+  fs.writeFile(filedir, newFileContent, (err) => {
+    if (err) {
+      console.error("Ошибка записи в файл:", err);
+      return;
+    }
+    console.log('Файл успешно обновлен!');
+  });
+}
+
+
+const renameFolder = async (oldFolderPath, link) => {
+  try {
+
+    if(typeof link != 'object') link = await deep.select({id: link})
+
+    const name = await getLinkName(link)
+
+
+    let newFolderName = name
+      ? `${newLink.data[0].id}__${name}__${newLink.data[0].type_id}`
+      : `${newLink.data[0].id}__${newLink.data[0].type_id}`;
+
+    const newFolderPath = path.join(path.dirname(oldFolderPath), newFolderName);
+
+    await fs.promises.rename(oldFolderPath, newFolderPath);
+    console.log(`Папка успешно переименована в ${newFolderName}`);
+  } catch (err) {
+    console.error("Ошибка при переименовании папки:", err);
+  }
+}
+
+
+
 const selectRelation = async (arrayLink, baseDir, subNum = null) => {
     const idInFolder = getIdFromFolderName(baseDir);
     let linkDir;
@@ -172,8 +207,8 @@ const selectRelation = async (arrayLink, baseDir, subNum = null) => {
             if (subNum != null) await subClean(relationTypeDir, arrayLink[0].data, subNum); // Используем номер подписки
 
             const newLinkDir = subNum !== null 
-              ? (nameLink ? `${objLink.id}__"${nameLink}"__${objLink.type_id}__${subNum}` : `${objLink.id}__${objLink.type_id}__${subNum}`)
-              : (nameLink ? `${objLink.id}__"${nameLink}"__${objLink.type_id}` : `${objLink.id}__${objLink.type_id}`);
+              ? (nameLink ? `${objLink.id}__${nameLink}__${objLink.type_id}__${subNum}` : `${objLink.id}__${objLink.type_id}__${subNum}`)
+              : (nameLink ? `${objLink.id}__${nameLink}__${objLink.type_id}` : `${objLink.id}__${objLink.type_id}`);
 
 
             linkDir = path.join(relationTypeDir, newLinkDir);
@@ -240,8 +275,8 @@ const passingInLink = async (returnPath, arrayLink, baseDir, subNum = null) => {
         nameLink = await getLinkName(arrayLink[i].id);
 
         const newLinkDirName = subNum !== null 
-          ? (nameLink ? `${arrayLink[i].id}__"${nameLink}"__${arrayLink[i].type_id}__${subNum}` : `${arrayLink[i].id}__${arrayLink[i].type_id}__${subNum}`)
-          : (nameLink ? `${arrayLink[i].id}__"${nameLink}"__${arrayLink[i].type_id}` : `${arrayLink[i].id}__${arrayLink[i].type_id}`);
+          ? (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}__${subNum}` : `${arrayLink[i].id}__${arrayLink[i].type_id}__${subNum}`)
+          : (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}` : `${arrayLink[i].id}__${arrayLink[i].type_id}`);
 
         newLinkDir = path.join(newDir, newLinkDirName);
   
@@ -401,15 +436,32 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
 
 
   for (const linkFolder of straightPathResults.results) {
+      const linkPath = straightPathResults.path[linkId] 
+
+      const dataPath = path.join(linkPath, 'data.json');
+
+
+
       const linkId = linkFolder.id;
       
       // Проверка существования связи в БД по linkId
       const currentLink = await deep.select({ id: linkId });
       const nameLink = await getLinkName(linkId);
       const nameFolderLink = straightPathResults.listNameLink[linkId];
-
+      
       console.log(nameLink, 'nameLink0000');
       console.log(nameFolderLink, 'nameFolderLink0000');
+      
+
+
+      if (!fs.existsSync(linkPath) || !fs.existsSync(dataPath)) {
+        console.warn(`Путь ${linkPath} или файл ${dataPath} не найдены!`);
+        await deep.delete({id: linkId})
+        console.warn(`связь ${linkId} удалена из дипа`);
+        continue; // Переходим к следующей связи
+      }
+
+
       
       // Если текущей связи нет в БД, создаем новую
       if (!currentLink || currentLink.data.length === 0) {
@@ -428,12 +480,19 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
               );  
           }
           console.log(`Создана новая связь с id ${newLink.data[0].id}`);
+
+
+           // обновление data.json           
+          console.log(`измененно значение  в файле ${dataPath} на ${newLink}`);
+          await replaceFile(dataPath, newLink)
+          // обновление названия
+          renameFolder(linkPath, newLink)
       } else {
           // Если связь найдена, обновляем значения
           const existingLink = currentLink.data[0]; // Считаем, что мы получили нужный объект
 
           // Проверяем и обновляем name
-          if (nameFolderLink !== nameLink) {
+          if (nameFolderLink != nameLink) {
               const test = await deep.select({ id: { type_id: 3, in: { linkId } } });
               console.log(test, 'testssss');
 
@@ -454,6 +513,8 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
           }
           if (existingLink.type_id !== linkFolder.type_id) {
               await deep.update(linkId, { type_id: linkFolder.type_id });
+
+              renameFolder(linkPath, linkId)
           }
 
           if (existingLink.value !== linkFolder.value) {
@@ -467,6 +528,8 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
       }
   }
 };
+
+
 
 
 // Функция для обработки пути реляций
@@ -578,22 +641,31 @@ const processStraightPath = async (straightPath, currentDir) => {
 
 const commandStraightSync = async (commandResults, straightPathData) => {
   let listNameLink = straightPathData.listNameLink
-  let straightPathResults = straightPathData.results
+  let listValueDataLink = straightPathData.results
   let pathResults = straightPathData.path
+  const idFolderLink = straightPathData.results.id
+
+
   console.log(straightPathData, 'commandStraightSynccommandStraightSynccommandStraightSync');
 
-  console.log(straightPathResults, 'commandStraightSynccommandStraightSynccommandStraightSync');
-  const idSetFromStraightPath = new Set(straightPathResults.map(item => item.id));
+  console.log(listValueDataLink, 'commandStraightSynccommandStraightSynccommandStraightSync');
+  const idSetFromStraightPath = new Set(listValueDataLink.map(item => item.id));
   
   console.log(straightPathData, 'straightPathData1111');
 
   // Перебираем значения из списка папок-связей
-  for (const straightPathResult of straightPathResults) {
+  for (const straightPathResult of listValueDataLink) {
+
+      const linkPath = listValueDataLink.path[straightPathResult] 
+
+      const dataPath = path.join(linkPath, 'data.json');
+
+
       const originalId = straightPathResult.id;  // id из папки-связи
 
       console.log(straightPathResult, 'straightPathResult');
 
-      // Если в списке команд (commandResults) нет id, который есть в списке папок (straightPathResults)
+      // Если в списке команд (commandResults) нет id, который есть в списке папок (listValueDataLink)
       console.log(originalId, '=====================');
       if (!commandResults.some(commandResult => commandResult.id === originalId)) {
           console.log(originalId, '=====================');
@@ -622,89 +694,128 @@ const commandStraightSync = async (commandResults, straightPathData) => {
                     { value: straightPathResult.value },
                     { table: (typeof straightPathResult.value) + 's' }
                 );  
+                console.log(`Обновлена связь ${straightPathResult}`);
               }
-            //   if (nameLink) {
-            //     const contain = await deep.insert({
-            //       from_id: straightPathResult.from_id,
-            //       to_id: newLink.data[0].id,
-            //       type_id: 3,
-            //     });
-            //     console.log(`Обновлена связь ${linkId}`);
-            // }
+              if (nameLink) {
+                const contain = await deep.insert({
+                  from_id: 380,
+                  to_id: newLink.data[0].id,
+                  type_id: 3,
+                });
+                await deep.update(
+                  { link_id: contain.data[0].id },
+                  { value: nameLink },
+                  { table: (typeof nameLink) + 's' }
+                ); 
+                console.log(`Добавлена контейн-связь ${contain.data[0].id} с содержимым ${nameLink}`);
+            }
 
-              console.log(originalId)
-              console.log('originalId000101010101')
-              // Получаем новый id вставленной связи
-              const insertedId = newLink.data[0].id;
+               // обновление data.json           
+              console.log(`измененно значение  в файле ${dataPath} на ${newLink}`);
+              await replaceFile(dataPath, newLink)
+              // обновление названия папки-связи
+              console.log(`измененно название папки-связи с  ${dataPath} на ${newLink}`);
+              renameFolder(linkPath, newLink)
 
-
-              const oldFolderEntry = pathResults.find(item => item.id === originalId); // Находим старую запись по id
-              if (!oldFolderEntry) {
-                  console.error(`Не найден путь для id ${originalId} в pathResults.`);
-                  continue; // Прерываем выполнение, так как пути не существует
-              }
-
-              const oldFolderPath = oldFolderEntry.path; // Извлекаем путь
-              const linkDir = path.dirname(oldFolderPath); 
-              console.log(linkDir, 'linkDir');
-
-              // Формируем новое название папки-связи
-              let newFolderName = nameLink
-                  ? `${insertedId}__"${nameLink}"__${straightPathResult.type_id}`
-                  : `${insertedId}__${straightPathResult.type_id}`;
-
-              const newFolderPath = path.join(linkDir, newFolderName); // Новый путь для папки
-
-              // Переименовываем папку
-              fs.rename(oldFolderPath, newFolderPath, (err) => {
-                  if (err) {
-                      console.error(`Ошибка при переименовании папки ${oldFolderPath} в ${newFolderPath}:`, err);
-                  } else {
-                      console.log(`Папка переименована с ${oldFolderPath} на ${newFolderPath}`);
-                  }
-              });
-
-                
-              console.log(`Добавлена связь ${originalId} из ${straightPathResult.from_id} в ${straightPathResult.to_id} с новым id ${insertedId}. Название: ${newFolderPath} Содержимое ${straightPathResult.value}`);
+              console.log(`Добавлена связь ${originalId} из ${straightPathResult.from_id} в ${straightPathResult.to_id} с новым id ${newLink.data[0].id}`);
           }
       } else {
           // Если id совпадают, но другие значения этого объекта отсутствуют
           const commandResult = commandResults.find(cmdResult => cmdResult.id === originalId);
           if (commandResult) {
-              if (!areObjectsEqual(commandResult, straightPathResult)) {
-                  // Обновляем значения в базе данных
-                  const updates = {};
-                  if (commandResult.to_id !== straightPathResult.to_id) updates.to_id = straightPathResult.to_id;
-                  if (commandResult.from_id !== straightPathResult.from_id) updates.from_id = straightPathResult.from_id;
-                  if (commandResult.type_id !== straightPathResult.type_id) updates.type_id = straightPathResult.type_id;
-                  if (commandResult.value !== straightPathResult.value) {
-                      updates.value = straightPathResult.value;
-                  }
 
-                  // Обновляем в базе данных, если есть изменения
-                  if (Object.keys(updates).length > 0) {
-                      await deep.update({ id: originalId }, updates);
-                      console.log(`Обновлена связь с id ${originalId} на ${JSON.stringify(updates)}`);
-                  }
+            const idFolderLink = straightPathResult.id;
+
+            const nameLinkFolder = listNameLink[idFolderLink]
+            const nameLinkCurrent = getLinkName(idFolderLink)
+
+            console.log(nameLinkFolder, 'nameLinkFolder')
+            console.log(nameLinkCurrent, 'nameLinkCurrent')
+
+            if(nameLinkCurrent != nameLinkFolder){
+              await deep.update(
+                { link_id: { type_id: 3, in: { linkId } } },
+                { value: idFolderLink },
+                { table: (typeof idFolderLink) + 's' }
+              );   
+            }
+
+            if (!areObjectsEqual(commandResult, straightPathResult)) {
+              const updates = [];
+          
+              // Добавляем обновления для to_id, from_id, type_id
+              if (commandResult.to_id !== straightPathResult.to_id) {
+                updates.push({ to_id: straightPathResult.to_id });
               }
+              if (commandResult.from_id !== straightPathResult.from_id) {
+                updates.push({ from_id: straightPathResult.from_id });
+              }
+              if (commandResult.type_id !== straightPathResult.type_id) {
+                updates.push({ type_id: straightPathResult.type_id });
+              }
+          
+              // Добавляем обновление для value, включая тип
+              if (commandResult.value !== straightPathResult.value) {
+                updates.push({ value: straightPathResult.value });
+                updates.push({ table: (typeof straightPathResult.value) + 's' });
+              }
+
+          
+              // Обновляем в базе данных, если есть изменения
+              if (updates.length > 0) {
+                await deep.update({ id: originalId }, updates);
+                console.log(`Обновлена связь с id ${originalId} на ${JSON.stringify(updates)}`);
+              }
+            }
+
+            
           }
+          // if (commandResult) {
+          //   if (!areObjectsEqual(commandResult, straightPathResult)) {
+          //     let updates = {};
+          
+          //     if (commandResult.to_id !== straightPathResult.to_id)
+          //       updates = Object.assign(updates, { to_id: straightPathResult.to_id });
+          //     if (commandResult.from_id !== straightPathResult.from_id)
+          //       updates = Object.assign(updates, {
+          //         from_id: straightPathResult.from_id,
+          //       });
+          //     if (commandResult.type_id !== straightPathResult.type_id)
+          //       updates = Object.assign(updates, {
+          //         type_id: straightPathResult.type_id,
+          //       });
+          //     if (commandResult.value !== straightPathResult.value) {
+          //       updates = Object.assign(updates, {
+          //         value: straightPathResult.value,
+          //       });
+          //       updates = Object.assign(updates, {
+          //         table: (typeof straightPathResult.value) + 's',
+          //       });
+          //     }
+          
+          //     if (Object.keys(updates).length > 0) {
+          //       await deep.update({ id: originalId }, updates);
+          //       console.log(`Обновлена связь с id ${originalId} на ${JSON.stringify(updates)}`);
+          //     }
+          //   }
+          // }
       }
   }
 
   // Удаляем лишние записи в БД
   const idSetFromCommandResults = new Set(commandResults.map(item => item.id));
-  const straightPathResultsId = new Set(straightPathResults.map(item => item.id));
+  const listValueDataLinkId = new Set(listValueDataLink.map(item => item.id));
 
   console.log(idSetFromCommandResults, 'idSetFromCommandResults9999')
-  console.log(straightPathResultsId, 'straightPathResultsId9999')
+  console.log(listValueDataLinkId, 'listValueDataLinkId9999')
   console.log(commandResults, 'commandResults999911111')
-  console.log(straightPathResults, 'straightPathResults999911111')
+  console.log(listValueDataLink, 'listValueDataLink999911111')
   // Перебираем связи из папочной структуры
   for (const idSetFromCommandResult of idSetFromCommandResults) {
       console.log(idSetFromCommandResult, 'idSetFromCommandResult9999')
       // Если id из команд присутствует в БД, но отсутствует в папочной структуре
 
-      console.log(straightPathResultsId, 'straightPathResultsId999900000')
+      console.log(listValueDataLinkId, 'listValueDataLinkId999900000')
       if (!straightPathResultsId.has(idSetFromCommandResult)) {
           const existingConnection = await deep.select({ id: idSetFromCommandResult });
           if (existingConnection.data.length > 0) {
@@ -713,7 +824,6 @@ const commandStraightSync = async (commandResults, straightPathData) => {
           }
       }
   }
-
 };
 
 
@@ -758,8 +868,8 @@ const selectSimple = async (resultData, currentDir, subNum = null) => {
       
       // Формируем имя папки в зависимости от наличия subNum
       const newLinkDir = subNum !== null 
-          ? (nameLink ? `${link.id}__"${nameLink}"__${link.type_id}__${subNum}` : `${link.id}__${link.type_id}__${subNum}`)
-          : (nameLink ? `${link.id}__"${nameLink}"__${link.type_id}` : `${link.id}__${link.type_id}`);
+          ? (nameLink ? `${link.id}__${nameLink}__${link.type_id}__${subNum}` : `${link.id}__${link.type_id}__${subNum}`)
+          : (nameLink ? `${link.id}__${nameLink}__${link.type_id}` : `${link.id}__${link.type_id}`);
       console.log(newLinkDir, 'newLinkDir')
       console.log(link.id, 'link.id')
       console.log(link.type_id, 'link.type_id')
@@ -852,7 +962,7 @@ const subClean = async (currentDir, linkList, subNum) => {
           const linkType = linkList.find(link => link.id === dirId).type_id;
 
           const expectedDirName = nameLink ? 
-              `${dirId}__"${nameLink}"__${linkType}__${subNum}` : 
+              `${dirId}__${nameLink}__${linkType}__${subNum}` : 
               `${dirId}__${linkType}__${subNum}`;
 
           console.log(expectedDirName, 'expectedDirName9999')
@@ -870,157 +980,124 @@ const subClean = async (currentDir, linkList, subNum) => {
 
 
 
+const watcher = chokidar.watch(dirPath);
+
+const path1 = path
+let oldDirName = null;
+
+watcher.on('all', async (event, path, stats) => {
+    const currentDir = path1.dirname(path);
+    console.log(event, 'event')
 
 
-// Настройка наблюдателя за появлением и удалением файлов
-watch.watchTree(dirPath, async (f, curr, prev) => {
-    if (typeof f === 'object' && prev === null && curr === null) {
-      return;
-    } else if (typeof f === 'string') {
-      const currentDir = path.dirname(f);
-      const evalPath = path.join(currentDir, 'eval.js');
-  
-      if (f.endsWith('eval.js')) { // Проверяем, является ли файл eval.js
-        if (fs.existsSync(evalPath)) {
-          // Файл существует (создание/изменение)
-          try {
-            const data = await fileread(evalPath);
-            evalData[evalPath] = data;
-            console.log(`Файл eval.js был изменен в ${currentDir}. Данные обновлены.`);
-          } catch (error) {
-            console.error(`Ошибка чтения eval.js: ${error}`);
-          }
-        } else {
-          // Файл удален
-          if (evalData[evalPath]) {
-            try {
-              createFile(evalPath, evalData[evalPath]);
-              console.log(`Файл eval.js был удален. Восстановлен из данных.`);
-              delete evalData[evalPath];
-              await executeEvalFile(evalPath, currentDir); // Выполняем после восстановления
-            } catch (error) {
-              console.error(`Ошибка восстановления eval.js: ${error}`);
+
+    if (event === 'unlinkDir') {
+        oldDirName = path; // Сохраняем имя старой папки
+    } else if (event === 'addDir') {
+        if (oldDirName) {
+            const oldDir = path1.basename(oldDirName);
+            const newDir = path1.basename(path);
+    
+            if (oldDir !== newDir) {
+                const dataFilePath = path1.join(currentDir, newDir, 'data.json');
+                if (fs.existsSync(dataFilePath)) {
+                    try {
+                        let data = fs.readFileSync(dataFilePath, 'utf8');
+                        data = JSON.parse(data);
+    
+                        // Извлечение id из названия папки
+                        const dirComponents = newDir.split('__');
+                        if (dirComponents.length > 1) {
+                            data.id = parseInt(dirComponents[0], 10);
+                            data.type_id = parseInt(dirComponents[dirComponents.length - 1], 10);
+    
+                            // Обновление файла data.json
+                            fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2));
+                            console.log(`Файл data.json обновлен в директории ${newDir}`);
+                        }
+                    } catch (error) {
+                        console.error(`Ошибка обработки data.json в ${currentDir}: ${error}`);
+                    }
+                }
+                // Обработка переименования папки
+    
+                // Очистка oldDirName
+                oldDirName = null;
             }
-          } else {
-            console.log(`Файл eval.js был удален в ${currentDir}.`);
-          }
+        } 
+    } else if (event === 'change') {
+        const newDir = path1.basename(path);
+        const dataFilePath = path1.join(currentDir, newDir, 'eval.js');
+        if (fs.existsSync(dataFilePath)) {
+            try {
+                let data = fs.readFileSync(dataFilePath, 'utf8');
+                data = JSON.parse(data);
+    
+                // Обновление файла данных
+                // Ваша логика обновления данных
+    
+                fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2));
+                console.log(`Файл eval.js обновлен в директории ${newDir}`);
+            } catch (error) {
+                console.error(`Ошибка обработки eval.js в ${currentDir}: ${error}`);
+            }
         }
-      }
+    } else if (event === 'unlink') {
+        const newDir = path1.basename(path);
+        const dataFilePath = path1.join(currentDir, 'eval.js');
+        if (!fs.existsSync(dataFilePath)) {
+            try {
+                const newData = { id: 0, type_id: 0 }; // Здесь можно определить начальные данные для нового файла
+                fs.writeFileSync(dataFilePath, JSON.stringify(newData, null, 2));
+                console.log(`Создан новый файл eval.js в директории ${newDir}`);
+            } catch (error) {
+                console.error(`Ошибка создания eval.js в ${currentDir}: ${error}`);
+            }
+        }
     }
-  });
-      
+});
 
-  // Функция для чтения файла
+
+
+
+
+// Функция для чтения файла
 const fileread = (currentDir) => {
-    return new Promise((resolve, reject) => {
-      fs.readFile(currentDir, 'utf8', (err, data) => {
-        if (err) {
-          console.error('Ошибка чтения:',currentDir, err);
-          reject(err);
-          return;
-        }
-        resolve(data);
-      });
+  return new Promise((resolve, reject) => {
+    fs.readFile(currentDir, 'utf8', (err, data) => {
+      if (err) {
+        console.error('Ошибка чтения:',currentDir, err);
+        reject(err);
+        return;
+      }
+      resolve(data);
     });
-  };
-  
+  });
+};
+
+async function updateDataFile(dataFilePath, newDir) {
+  try {
+    const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+
+    // Разбиваем имя папки на части
+    const parts = newDir.split('__');
+
+    // Извлекаем первый и последний элементы
+    const id = parseInt(parts[0], 10);
+    const typeId = parseInt(parts[parts.length - 1], 10);
+
+    // Обновляем данные в файле
+    data.id = id;
+    data.type_id = typeId;
+
+    // Записываем обновленные данные в файл
+    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (error) {
+    throw error;
+  }
+}
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-  // const processStraightPath = async (straightPath, currentDir) => {
-  //   console.log('Обработка straightPath:', straightPath);
-  
-  //   // Массив для хранения найденных значений
-  //   const results = [];
-  //   const listNameLink = {};
-  //   const pathResults = []; // Новый массив для хранения { id, path }
-  //   let data;
-  //   for (const userPath of straightPath) {
-  //       const absolutePath = path.join(currentDir, userPath);
-  //       // Проверяем, существует ли путь
-  //       if (fs.existsSync(absolutePath)) {
-  //           const stats = fs.statSync(absolutePath);
-  
-  //           // Если это файл data.json
-  //           if (stats.isFile() && path.basename(absolutePath) === 'data.json') {
-  //               data = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
-  
-  //               // Получаем id из имени родительской папки
-  //               const folderName = path.dirname(absolutePath).split(path.sep).pop(); // Папка-связь
-  //               const linkId = folderName.split('__')[0];
-  
-  //               // Читаем значение из value.txt
-  //               const value = fs.readFileSync(path.join(path.dirname(absolutePath), 'value.txt'), 'utf-8');
-  //               console.log(data, 'data2222');
-  
-  //               // Обновляем объект
-  //               data = { ...data, value, id: Number(linkId) };   // Устанавливаем id из имени папки
-  //               console.log(data, 'data3333');
-  
-  //               listNameLink[data.id] = await getLinkName(data.id);
-  //               console.log(listNameLink, 'listNameLink3333');
-  
-  //               // Добавляем объект в массив pathResults
-  //               pathResults.push({ id: data.id, path: absolutePath });
-  //               console.log('Значение добавлено из data.json:', data);
-  //           }
-  //           // Если это директория
-  //           else if (stats.isDirectory()) {
-  //               const files = fs.readdirSync(absolutePath);
-  //               const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
-  
-  //               if (hasRelationFiles) {
-  //                   // Папка-связь — обрабатываем файл data.json
-  //                   const dataFilePath = path.join(absolutePath, 'data.json');
-  //                   data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-  
-  //                   const folderName = path.basename(absolutePath);
-  //                   const linkId = folderName.split('__')[0];
-  
-  //                   // Читаем значение из value.txt
-  //                   const value = fs.readFileSync(path.join(absolutePath, 'value.txt'), 'utf-8');
-  //                   console.log(data, 'data2222');
-  
-  //                   // Обновляем объект
-  //                   data = { ...data, value, id: Number(linkId) }; // Устанавливаем id из имени папки
-  //                   console.log(data, 'data3333');
-  
-  //                   listNameLink[data.id] = await getLinkName(data.id);
-  //                   console.log(listNameLink, 'listNameLink3333');
-
-                    
-  //                   // Добавляем объект в массив pathResults
-  //                   pathResults.push({ id: data.id, path: absolutePath });
-  //                   console.log('Обработаны данные связи из папки:', data);
-  //               } else {
-  //                   // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-  //                   const subDirs = files.filter(file => fs.statSync(path.join(absolutePath, file)).isDirectory());
-  
-  //                   for (const subDir of subDirs) {
-  //                       const subDirPath = path.join(absolutePath, subDir);
-  //                       // Запускаем рекурсивный вызов и собираем результаты
-  //                       const subResults = await processStraightPath([subDirPath], currentDir);
-  //                       pathResults.push(...subResults.pathResults); // Делаем "распаковку"массива
-  //                       Object.assign(listNameLink, subResults.listNameLink); // Объединяем списки имен ссылок
-  //                   }
-  //               }
-  //           }
-  //       } else {
-  //           console.warn(`Путь не существует: ${absolutePath}`);
-  //       }
-  //   }
-  
-  //   return { results: data, listNameLink: listNameLink, path: pathResults }; // Возвращаем результаты, список имен ссылок и пути
-  // };
 
