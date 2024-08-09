@@ -98,12 +98,15 @@ const getIdFromFolderName = (folderPath) => {
 };
 
 const getLinkName = async (linkId) => {
+    console.log(linkId, 'linkId11111')
     const nameLink = await deep.select({
         type_id: 3,
         to_id: linkId,
     });
-
+    console.log(nameLink, 'nameLink11111')
     if (nameLink.data.length > 0) {
+        console.log(nameLink.data, 'nameLink.data11111')
+        console.log(nameLink.data[0].value, 'nameLink.data[0].value11111')
         if(nameLink.data[0].value == null) return undefined
         return nameLink.data[0].value?.value;
     }
@@ -131,7 +134,7 @@ const createDataFile = (link, directoryPath) => {
 };
 
 
-const selectRelation = async (arrayLink, baseDir) => {
+const selectRelation = async (arrayLink, baseDir, subNum = null) => {
     const idInFolder = getIdFromFolderName(baseDir);
     let linkDir;
     let nameLink;
@@ -164,11 +167,17 @@ const selectRelation = async (arrayLink, baseDir) => {
             createDirectory(relationTypeDir);
 
             nameLink = await getLinkName(objLink.id);
-            if (nameLink == undefined || nameLink == null) {
-                linkDir = path.join(relationTypeDir, `${objLink.id}__${objLink.type_id}`);
-            } else {
-                linkDir = path.join(relationTypeDir, `${objLink.id}__"${nameLink}"__${objLink.type_id}`);
-            }
+
+
+            if (subNum != null) await subClean(relationTypeDir, arrayLink[0].data, subNum); // Используем номер подписки
+
+            const newLinkDir = subNum !== null 
+              ? (nameLink ? `${objLink.id}__"${nameLink}"__${objLink.type_id}__${subNum}` : `${objLink.id}__${objLink.type_id}__${subNum}`)
+              : (nameLink ? `${objLink.id}__"${nameLink}"__${objLink.type_id}` : `${objLink.id}__${objLink.type_id}`);
+
+
+            linkDir = path.join(relationTypeDir, newLinkDir);
+
 
             // Проверка существования папки
             if (!fs.existsSync(linkDir)) {
@@ -181,7 +190,7 @@ const selectRelation = async (arrayLink, baseDir) => {
             linkDir = baseDir;
         }
 
-        await passingInLink(arrayLink[0].return, objLink, linkDir);
+        await passingInLink(arrayLink[0].return, objLink, linkDir, subNum);
     }
 };
 
@@ -205,7 +214,7 @@ const passingInReturn = (returnPath) => {
     let relationOldName = relationName;
     return [relationNewName, relationOldName, returnPath];
  };
-const passingInLink = async (returnPath, arrayLink, baseDir) => {
+const passingInLink = async (returnPath, arrayLink, baseDir, subNum = null) => {
     let data = passingInReturn(returnPath);
     let nameLink;
     let newLinkDir;
@@ -221,13 +230,21 @@ const passingInLink = async (returnPath, arrayLink, baseDir) => {
     if (typeof arrayLink === 'object') arrayLink = arrayLink[relationOldName];
 
     for (let i = 0; arrayLink.length > i; i++) {
-        nameLink = await getLinkName(arrayLink[i].id);
-        if (nameLink == undefined || nameLink == null) {
-            newLinkDir = path.join(newDir, `${arrayLink[i].id}__${arrayLink[i].type_id}`);
-        } else {
-            newLinkDir = path.join(newDir, `${arrayLink[i].id}__"${nameLink}"__${arrayLink[i].type_id}`);
-        }
 
+
+
+        if (subNum != null) await subClean(relationTypeDir, arrayLink, subNum); // Используем номер подписки
+              
+        
+
+        nameLink = await getLinkName(arrayLink[i].id);
+
+        const newLinkDirName = subNum !== null 
+          ? (nameLink ? `${arrayLink[i].id}__"${nameLink}"__${arrayLink[i].type_id}__${subNum}` : `${arrayLink[i].id}__${arrayLink[i].type_id}__${subNum}`)
+          : (nameLink ? `${arrayLink[i].id}__"${nameLink}"__${arrayLink[i].type_id}` : `${arrayLink[i].id}__${arrayLink[i].type_id}`);
+
+        newLinkDir = path.join(newDir, newLinkDirName);
+  
         // Проверка существования папки
         if (!fs.existsSync(newLinkDir)) {
             createDirectory(newLinkDir);
@@ -314,17 +331,6 @@ const processResult = async (resultData, data, currentDir) => {
   // Если это подписка, используем полученный resultData
   if (resultData && typeof resultData.subscribe === 'function') {
       const subscriptionResult = await handleSubscription(resultData, currentDir, data);
-      
-      // console.log(subscriptionResult, 'subscriptionResult');
-
-      // if (subscriptionResult) {
-      //     const { folderName, resultData: subResultData } = subscriptionResult;
-      //     subName = folderName; // Сохранение имени папки подписки
-
-      //     // Обновляем resultData напрямую
-      //     resultData = subResultData; // Получаем весь необходимый результат
-      //     console.log(resultData, 'Обновленный resultData с фильтрованными данными'); 
-      // }
       return
   }
 
@@ -347,9 +353,8 @@ const processResult = async (resultData, data, currentDir) => {
 const selectSimple = async (resultData, currentDir, subNum = null) => {
   const linkList = resultData[0].data || resultData[0]; // Получаем список связей
 
-  if (subNum != null) {
-    await subClean(currentDir, linkList, subNum); // Используем номер подписки
-}
+  if (subNum != null) await subClean(currentDir, linkList, subNum); // Используем номер подписки
+  
   for (const link of linkList) {
       const nameLink = await getLinkName(link.id);
       
@@ -396,7 +401,7 @@ const handleSubscription = async (subscription, currentDir, data) => {
                 };
                 
               if (resultData[0].return !== undefined) {
-                await selectRelation(resultData, currentDir);
+                await selectRelation(resultData, currentDir, subscriptionData.folderName);
               } else {
                 await selectSimple(resultData, currentDir, subscriptionData.folderName); // Передаем subName
               }
@@ -464,52 +469,6 @@ const subClean = async (currentDir, linkList, subNum) => {
     }
   }
 };
-
-
-
-
-
-// // Синхронизация ссылок и папок
-// const syncLinks = async (incomingLinks, currentDir, subscriptionCount) => {
-//     const existingDirs = fs.readdirSync(currentDir).filter(file => fs.statSync(path.join(currentDir, file)).isDirectory());
-    
-//     const incomingMap = new Map();
-//     for (const link of incomingLinks) {
-//         const nameLink = await getLinkName(link.id); // Получаем имя в асинхронном режиме
-//         const linkName = nameLink !== undefined ? nameLink : `link_${link.id}`;
-//         incomingMap.set(link.id, { ...link, name: linkName });
-//     }
-
-//     // Удаляем старые папки, которые отсутствуют в новых данных
-//     existingDirs.forEach(dir => {
-//         const id = dir.split('__')[0]; // Получаем ID из имени папки
-//         if (!incomingMap.has(id)) {
-//             console.log(`Удаляем папку ${dir}`);
-//             fs.rmdirSync(path.join(currentDir, dir), { recursive: true });
-//         }
-//     });
-
-//     // Обрабатываем новые или обновленные данные
-//     for (const link of incomingMap.values()) {
-//         const newLinkDirName = createSubscriptionDirectoryName(link.name, subscriptionCount); // Создаем новое имя папки
-//         const newLinkDir = path.join(currentDir, newLinkDirName);
-        
-//         // Проверяем, существует ли папка уже
-//         const existingDir = existingDirs.find(dir => dir.startsWith(link.id));
-//         if (existingDir) {
-//             // Если папка существует, обновляем файлы
-//             console.log(`Обновляем содержимое в папке ${newLinkDir}`);
-//             createValueFile(link, newLinkDir); // Обновляем value.txt
-//             createDataFile(link, newLinkDir);   // Обновляем data.json
-//         } else {
-//             // Если папка не существует, создаем её
-//             console.log(`Создаем папку ${newLinkDir}`);
-//             createDirectory(newLinkDir);
-//             createValueFile(link, newLinkDir); // Создаем value.txt
-//             createDataFile(link, newLinkDir);   // Создаем data.json
-//         }
-//     }
-// };
 
 
 
