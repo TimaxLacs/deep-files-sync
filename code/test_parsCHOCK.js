@@ -980,6 +980,7 @@ const subClean = async (currentDir, linkList, subNum) => {
 
 
 
+
 const watcher = chokidar.watch(dirPath);
 
 const path1 = path
