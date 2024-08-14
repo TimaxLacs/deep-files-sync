@@ -980,6 +980,7 @@ const handleSubscription = async (subscription, currentDir, data) => {
                 
               if (resultData[0].return !== undefined) {
                 await selectRelation(resultData, currentDir, subscriptionData.folderName);
+                await selectRelation(resultData, currentDir, subscriptionData.folderName);
               } else {
                 await selectSimple(resultData, currentDir, subscriptionData.folderName); // Передаем subName
               }
