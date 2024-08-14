@@ -8,7 +8,6 @@ import ws from 'ws';
 import fs from 'fs';
 import path from 'path';
 import watch from 'watch';
-import { constrainedMemory } from 'process';
 
 let evalData = {}; // Объект для хранения данных удаленных файлов
 let subscriptionCount = 0;
@@ -81,19 +80,19 @@ try {
 }
 
 // Функция для создания файла
-const createFile = (filePath, content = '') => {
+const createFile = async (filePath, content = '') => {
     if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, content, { flag: 'w' });
     }
 }
-const createDirectory = (directoryPath) => {
+const createDirectory = async (directoryPath) => {
    if (!fs.existsSync(directoryPath)) {
        fs.mkdirSync(directoryPath, { recursive: true });
    };
 
 };
 
-const getIdFromFolderName = (folderPath) => {
+const getIdFromFolderName = async (folderPath) => {
     const folderName = path.basename(folderPath); 
     return folderName.split('__')[0]; 
 };
@@ -111,18 +110,25 @@ const getLinkName = async (linkId) => {
     return undefined;
 }
 
-const createValueFile = (link, directoryPath) => {
-    const valueFilePath = path.join(directoryPath, 'value.txt');
+const createValueFile = async (link, directoryPath) => {
+  const valueFilePath = path.join(directoryPath, 'value.txt');
 
-    // Получаем значение из объекта связи
-    const valueContent = link.value !== null ? JSON.stringify(link.value.value) : 'null';
+  // Получаем значение из объекта связи
+  let valueContent = link.value !== null ? JSON.stringify(link.value.value) : 'null';
 
-    // Создаем файл value.txt и записываем в него значение
-    fs.writeFileSync(valueFilePath, valueContent, { flag: 'w' });
-    console.log(`Создан файл ${valueFilePath} с содержимым: ${valueContent}`);
+  // Проверяем, начинаются ли и заканчиваются ли строки двойными кавычками
+  if (valueContent.startsWith('"') && valueContent.endsWith('"')) {
+    // Обрезаем двойные кавычки по краям
+    valueContent = valueContent.slice(1, -1);
+  }
+
+  // Создаем файл value.txt и записываем в него значение
+  fs.writeFileSync(valueFilePath, valueContent, { flag: 'w' });
+  console.log(`Создан файл ${valueFilePath} с содержимым: ${valueContent}`);
 };
 
-const createDataFile = (link, directoryPath) => {
+
+const createDataFile = async (link, directoryPath) => {
     const dataFilePath = path.join(directoryPath, 'data.json');
 
     // Создаем файл data.json и записываем в него значение
@@ -132,12 +138,12 @@ const createDataFile = (link, directoryPath) => {
 
 
 
-const replaceFile = async (filedir, newFileContent) => {
-  console.log(newFileContent, 'newFileContent0000')
-  if(typeof newFileContent != 'object') newFileContent = await deep.select({id: newFileContent})
-  else newFileContent = await deep.select({id: newFileContent.id})
+const replaceFile = async (filedir, link) => {
+  console.log(link, 'link0000')
+  if(typeof link != 'object') link = await deep.select({id: link})
+  else link = await deep.select({id: link.id})
 
-  let fileContentString = JSON.stringify(newFileContent.data[0]);
+  let fileContentString = JSON.stringify(link.data[0]);
   console.log(fileContentString, 'fileContentString1111')
   if(fileContentString["data"]) fileContentString = fileContentString["data"][0]
   console.log(fileContentString, 'fileContentString2222')
@@ -151,23 +157,23 @@ const replaceFile = async (filedir, newFileContent) => {
 }
 
 
-const renameFolder = async (oldFolderPath, link) => {
+const renameFolder = async (filedir, link) => {
+  console.log(filedir, 'filedir')
   try {
-    console.log(`поиск в ${link}`);
+    console.log(`поиск в {link}`);
     console.log(link)
     if(typeof link != 'object') link = await deep.select({id: link})
     else link = await deep.select({id: link.id})
     console.log(link, 'link2222')
     const name = await getLinkName(link.data[0].id)
     console.log(`название в ${name}`);
-
     let newFolderName = name
       ? `${link.data[0].id}__${name}__${link.data[0].type_id}`
       : `${link.data[0].id}__${link.data[0].type_id}`;
 
-    const newFolderPath = path.join(path.dirname(oldFolderPath), newFolderName);
+    const newFolderPath = path.join(path.dirname(filedir), newFolderName);
 
-    await fs.promises.rename(oldFolderPath, newFolderPath);
+    await fs.promises.rename(filedir, newFolderPath);
     console.log(`Папка успешно переименована в ${newFolderName}`);
   } catch (err) {
     console.error("Ошибка при переименовании папки:", err);
@@ -176,8 +182,8 @@ const renameFolder = async (oldFolderPath, link) => {
 
 
 
-const selectRelation = async (arrayLink, baseDir, subNum = null) => {
-    const idInFolder = getIdFromFolderName(baseDir);
+const selectRelation = async (arrayLink, baseDir, subName = null) => {
+    const idInFolder = await getIdFromFolderName(baseDir);
     let linkDir;
     let nameLink;
 
@@ -206,15 +212,15 @@ const selectRelation = async (arrayLink, baseDir, subNum = null) => {
         }
         if (typeRelationDir) {
             const relationTypeDir = path.join(baseDir, typeRelationDir);
-            createDirectory(relationTypeDir);
+            await createDirectory(relationTypeDir);
 
             nameLink = await getLinkName(objLink.id);
 
 
-            if (subNum != null) await subClean(relationTypeDir, arrayLink[0].data, subNum); // Используем номер подписки
+            if (subName != null) await subClean(relationTypeDir, arrayLink[0].data, subName); // Используем номер подписки
 
-            const newLinkDir = subNum !== null 
-              ? (nameLink ? `${objLink.id}__${nameLink}__${objLink.type_id}__${subNum}` : `${objLink.id}__${objLink.type_id}__${subNum}`)
+            const newLinkDir = subName !== null 
+              ? (nameLink ? `${objLink.id}__${nameLink}__${objLink.type_id}--${subName}` : `${objLink.id}__${objLink.type_id}--${subName}`)
               : (nameLink ? `${objLink.id}__${nameLink}__${objLink.type_id}` : `${objLink.id}__${objLink.type_id}`);
 
 
@@ -223,20 +229,20 @@ const selectRelation = async (arrayLink, baseDir, subNum = null) => {
 
             // Проверка существования папки
             if (!fs.existsSync(linkDir)) {
-                createDirectory(linkDir);
+                await createDirectory(linkDir);
             }
 
-            createValueFile(objLink, linkDir);
-            createDataFile(objLink, linkDir);
+            await createValueFile(objLink, linkDir);
+            await createDataFile(objLink, linkDir);
         } else {
             linkDir = baseDir;
         }
 
-        await passingInLink(arrayLink[0].return, objLink, linkDir, subNum);
+        await passingInLink(arrayLink[0].return, objLink, linkDir, subName);
     }
 };
 
-const passingInReturn = (returnPath) => {
+const passingInReturn = async (returnPath) => {
     let relationName = Object.keys(returnPath)[0];
     for (let key = 0; typeof returnPath[relationName] !== 'object'; key++) {
         relationName = Object.keys(returnPath)[key];
@@ -245,7 +251,7 @@ const passingInReturn = (returnPath) => {
  
     if (!returnPath[relationName]['relation']) {
         returnPath = returnPath[relationName];
-        let data = passingInReturn(returnPath);
+        let data = await passingInReturn(returnPath);
         let relationNewName = data[0];
         let relationOldName = data[1];
         returnPath = data[2];
@@ -256,8 +262,12 @@ const passingInReturn = (returnPath) => {
     let relationOldName = relationName;
     return [relationNewName, relationOldName, returnPath];
  };
-const passingInLink = async (returnPath, arrayLink, baseDir, subNum = null) => {
-    let data = passingInReturn(returnPath);
+const passingInLink = async (returnPath, arrayLink, baseDir, subName = null) => {
+  
+
+
+    let data = await passingInReturn(returnPath);
+    console.log(data, 'data')
     let nameLink;
     let newLinkDir;
     if (data === undefined) return;
@@ -265,35 +275,41 @@ const passingInLink = async (returnPath, arrayLink, baseDir, subNum = null) => {
     let relationNewName = data[0];
     let relationOldName = data[1];
     let returnNewPath = data[2];
-
     let newDir = path.join(baseDir, relationNewName);
-    createDirectory(newDir); 
+    await createDirectory(newDir); 
 
+
+    console.log(arrayLink, 'arrayLink111111')
+    
     if (typeof arrayLink === 'object') arrayLink = arrayLink[relationOldName];
+    if(arrayLink == null) return;
+    if (!Array.isArray(arrayLink)) arrayLink = [arrayLink];
 
+    console.log(arrayLink, 'arrayLink22222')
+    console.log(arrayLink.length, 'arrayLink.length22222')
     for (let i = 0; arrayLink.length > i; i++) {
 
 
 
-        if (subNum != null) await subClean(relationTypeDir, arrayLink, subNum); // Используем номер подписки
+        if (subName != null) await subClean(relationTypeDir, arrayLink, subName); // Используем номер подписки
               
         
 
         nameLink = await getLinkName(arrayLink[i].id);
 
-        const newLinkDirName = subNum !== null 
-          ? (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}__${subNum}` : `${arrayLink[i].id}__${arrayLink[i].type_id}__${subNum}`)
+        const newLinkDirName = subName !== null 
+          ? (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}--${subName}` : `${arrayLink[i].id}__${arrayLink[i].type_id}--${subName}`)
           : (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}` : `${arrayLink[i].id}__${arrayLink[i].type_id}`);
 
         newLinkDir = path.join(newDir, newLinkDirName);
   
         // Проверка существования папки
         if (!fs.existsSync(newLinkDir)) {
-            createDirectory(newLinkDir);
+            await createDirectory(newLinkDir);
         }
         
-        createValueFile(arrayLink[i], newLinkDir);
-        createDataFile(arrayLink[i], newLinkDir);
+        await createValueFile(arrayLink[i], newLinkDir);
+        await createDataFile(arrayLink[i], newLinkDir);
 
         await passingInLink(returnNewPath[relationOldName], arrayLink[i], newLinkDir);
     }
@@ -308,7 +324,7 @@ const saveSubscriptionData = async (data, currentDir) => {
   const subFileName = `sub${subscriptionCount}.js`; // Уникальное имя файла
   const subFilePath = path.join(currentDir, subFileName);
   try {
-      createFile(subFilePath, data);
+      await createFile(subFilePath, data);
       console.log(`Сохранено значение подписки в файл ${subFileName}`);
       subscriptionCount++; // Увеличиваем счетчик для следующего файла
       return {
@@ -349,7 +365,7 @@ const executeEvalFile = async (evalPath, currentDir) => {
   fs.readFile(evalPath, 'utf8', async (err, data) => {
       if (err) {
           console.error('Ошибка чтения eval.js:', err);
-          createFile(path.join(currentDir, 'eval.js'));
+          await createFile(path.join(currentDir, 'eval.js'));
           return;
       }
 
@@ -364,6 +380,7 @@ const executeEvalFile = async (evalPath, currentDir) => {
               // Если не удалось парсить как объект, выполняем как обычно
               console.warn('Содержимое не является объектом, выполняем как обычный код.');
               const result = await executeAsync(data);
+              console.log('результат поиска', result)
               await processResult(result, data, currentDir);
               return;
           }
@@ -389,7 +406,7 @@ const executeEvalFile = async (evalPath, currentDir) => {
           }
       } catch (error) {
           console.error('Ошибка при выполнении eval.js:', error);
-          createFile(path.join(currentDir, 'eval.js'));
+          await createFile(path.join(currentDir, 'eval.js'));
       }
   });
 };
@@ -429,7 +446,7 @@ const handleRequest = async (parsedData, currentDir) => {
       }
   } catch (error) {
       console.error('Ошибка при выполнении команды:', error);
-      createFile(path.join(currentDir, 'error.txt'), `${error}`);
+      await createFile(path.join(currentDir, 'error.txt'), `${error}`);
   }
 };
 
@@ -443,16 +460,24 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
 
 
   for (const linkFolder of straightPathResults.results) {
-      const linkPath = straightPathResults.path[linkId] 
-
-      const dataPath = path.join(linkPath, 'data.json');
-
 
 
       const linkId = linkFolder.id;
+
+
+      const linkPath = straightPathResults.path.find(pathResult => pathResult.id === linkId)
+      console.log(straightPathResults.path, 'straightPathResults.path')
+      console.log(linkPath, 'linkPath')
+      console.log(linkId, 'linkId')
+      const dataPath = path.join(linkPath.path, 'data.json');
+
+
+
       
       // Проверка существования связи в БД по linkId
       const currentLink = await deep.select({ id: linkId });
+      console.log(currentLink);
+      console.log('currentLink========');
       const nameLink = await getLinkName(linkId);
       const nameFolderLink = straightPathResults.listNameLink[linkId];
       
@@ -461,30 +486,32 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
       
 
 
-      if (!fs.existsSync(linkPath) || !fs.existsSync(dataPath)) {
-        console.warn(`Путь ${linkPath} или файл ${dataPath} не найдены!`);
-        await deep.delete({id: linkId})
-        console.warn(`связь  ${linkPath} удалена!`);
-        continue; // Переходим к следующей связи
-      }
+      // if (!fs.existsSync(linkPath) || !fs.existsSync(dataPath)) {
+      //   console.warn(`Путь ${linkPath} или файл ${dataPath} не найдены!`);
+      //   await deep.delete({id: linkId})
+      //   console.warn(`связь  ${linkPath} удалена!`);
+      //   continue; // Переходим к следующей связи
+      // }
 
 
       
       // Если текущей связи нет в БД, создаем новую
       if (!currentLink || currentLink.data.length === 0) {
           console.log(linkFolder, 'linkFolder0000');
-          const newLink = await deep.insert({
-              from_id: linkFolder.from_id,
-              to_id: linkFolder.to_id,
-              type_id: linkFolder.type_id,
-          });
-
+          let newLink;
           if (linkFolder.value) {
-              await deep.update(
-                  { link_id: newLink.data[0].id },
-                  { value: linkFolder.value },
-                  { table: (typeof linkFolder.value) + 's' }
-              );  
+              newLink = await deep.insert({
+                from_id: linkFolder.from_id,
+                to_id: linkFolder.to_id,
+                type_id: linkFolder.type_id,
+                string: { data: { value: linkFolder.value.value } },
+            });
+          } else {
+              newLink = await deep.insert({
+                from_id: linkFolder.from_id,
+                to_id: linkFolder.to_id,
+                type_id: linkFolder.type_id,
+            });
           }
           console.log(`Создана новая связь с id ${newLink.data[0].id}`);
 
@@ -495,44 +522,58 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
           // обновление названия
           await renameFolder(linkPath.path, newLink.data[0])
       } else {
-          // Если связь найдена, обновляем значения
-          const existingLink = currentLink.data[0]; // Считаем, что мы получили нужный объект
+        // Если связь найдена, обновляем значения
+        const existingLink = currentLink.data[0]; // Считаем, что мы получили нужный объект
 
-          // Проверяем и обновляем name
-          if (nameFolderLink != nameLink) {
-              const test = await deep.select({ id: { type_id: 3, in: { id: linkId } } });
-              console.log(test, 'testssss');
+        let updatesTo = {};
+        let updatesType = {};
+        let updatesFrom = {};
+        let updatesValue1 = {};
+        let updatesValue2 = {};
+        // Проверяем и обновляем name
+        if (nameFolderLink != nameLink) {
+          const test = await deep.select({ id: { type_id: 3, to: { id: linkId } } });
+          console.log(test, 'testssss');
 
-              await deep.update(
-                  { link_id: { type_id: 3, in: { id: linkId } } },
-                  { value: nameFolderLink },
-                  { table: (typeof nameFolderLink) + 's' }
-              );     
-              console.log(`Обновлена связь ${linkId}`);
+          const contain = await deep.select({ type_id: 3, to: { id: linkId } })  // нужно что-то придмать с тем, чтобы это работало и в пустых контейнах. сейчас он изменяет содержимое только если оно уже есть
+          await deep.update(
+            { link_id: contain.data[0].id },
+            { value: nameFolderLink },
+            { table: (typeof nameFolderLink) + 's' }
+          );      
+          
+          console.log(`Обновлена связь ${linkId}`);
+        }
+        if (existingLink.to_id !== linkFolder.to_id){
+            updatesTo = { to_id: linkFolder.to_id };
+        }
+          if (existingLink.from_id !== linkFolder.from_id){
+            updatesFrom = {from_id: linkFolder.from_id};
+        }
+          if (existingLink.type_id !== linkFolder.type_id){
+            updatesType = {type_id: linkFolder.type_id};
+            await renameFolder(linkPath.path, linkId)
           }
-
-          // Проверяем и обновляем другие поля
-          if (existingLink.to_id !== linkFolder.to_id) {
-              await deep.update(linkId, { to_id: linkFolder.to_id });
-          }
-          if (existingLink.from_id !== linkFolder.from_id) {
-              await deep.update(linkId, { from_id: linkFolder.from_id });
-          }
-          if (existingLink.type_id !== linkFolder.type_id) {
-              await deep.update(linkId, { type_id: linkFolder.type_id });
-
-              await renameFolder(linkPath.path, linkId)
-          }
-
-          if (existingLink.value !== linkFolder.value) {
-              await deep.update(
-                  { link_id: linkId },
-                  { value: linkFolder.value },
-                  { table: (typeof linkFolder.value) + 's' }
-              );      
-              console.log(`Обновлена связь ${linkId}`);
-          }
-      }
+          if ((existingLink.value !== linkFolder.value) && existingLink.value != null) {
+            if(linkFolder.value != null || linkFolder.value != undefined){
+              updatesValue1 = { value: linkFolder.value.value};
+              updatesValue2 = { table: (typeof linkFolder.value.value) + 's' };
+            } else{
+              updatesValue1 = { value: " "};
+              updatesValue2 = { table: 'strings' };
+            }
+          }     
+          console.log(`Обновлена связь с id ${linkId} на`);
+          console.log(updatesTo, updatesFrom, updatesType, updatesValue1, updatesValue2)
+          await deep.update( 
+            updatesValue1,
+            updatesFrom,
+            updatesTo,
+            updatesType,
+            {link_id: linkId },
+            updatesValue2,
+            ); 
+        }
 
   }
 };
@@ -601,7 +642,8 @@ const processStraightPath = async (straightPath, currentDir) => {
                   let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
 
                   const folderName = path.basename(absolutePath);
-                  const linkId = folderName.split('__')[0];
+
+                
 
                   // Читаем значение из value.txt
                   let value = fs.readFileSync(path.join(absolutePath, 'value.txt'), 'utf-8').trim(); // Убираем лишние пробелы
@@ -614,7 +656,15 @@ const processStraightPath = async (straightPath, currentDir) => {
                   if(data.data) data = data.data[0]
                   console.log(data, '5556666');
                   // Получаем имя ссылки и добавляем в список
-                  listNameLink[data.id] = await getLinkName(data.id);
+                  console.log(folderName.split('__'), 'folderName.split()' )
+                  if(folderName.split('__').length >= 3) {
+                    listNameLink[data.id] = folderName.split('__')[1];
+                    console.log(folderName.split('__')[1], 'folderName.split()[2]');
+                  } else{
+                    listNameLink[data.id] = await getLinkName(data.id);
+                    console.log(listNameLink, 'listNameLink2222');
+                  }
+
                   console.log(listNameLink, 'listNameLink3333');
 
                   pathResults.push({ id: data.id, path: absolutePath });
@@ -680,7 +730,6 @@ const commandStraightSync = async (commandResults, straightPathData) => {
       // Если в списке команд (commandResults) нет id, который есть в списке папок (listValueDataLink)
       console.log(originalId, '=====================');
       if (!commandResults.some(commandResult => commandResult.id === originalId)) {
-          // console.log(originalId, '=====================');
           // console.log(originalId, 'straightPathResult');
           // console.log(idSetFromStraightPath, 'idSetFromStraightPath');
 
@@ -690,46 +739,44 @@ const commandStraightSync = async (commandResults, straightPathData) => {
 
           // Если нет, то добавляем связь
           if (existingConnection.data.length === 0) {
-              const nameLink = listNameLink[originalId] || undefined;
+              const nameLink = listNameLink[originalId] || ""
               console.log(straightPathResult, 'straightPathResult------')
 
               if(straightPathResult.from_id == null || straightPathResult.to_id == null|| straightPathResult.type_id == null) continue;
               // Создаем новую связь с указанной структурой
-              const newLink = await deep.insert({
-                  from_id: straightPathResult.from_id,
-                  to_id: straightPathResult.to_id,
-                  type_id: straightPathResult.type_id,
-                  // Добавьте другие необходимые поля
-              });
+              let newLink;
               if (straightPathResult.value) {
-                console.log(straightPathResult.value)
-                await deep.update(
-                    { link_id: newLink.data[0].id },
-                    { value: straightPathResult.value },
-                    { table: (typeof straightPathResult.value) + 's' }
-                );  
-                console.log(`Обновлена связь ${straightPathResult}`);
+                console.log('добавление новой связи с значением:', straightPathResult.value.value)
+                newLink = await deep.insert({
+                    from_id: straightPathResult.from_id,
+                    to_id: straightPathResult.to_id,
+                    type_id: straightPathResult.type_id,
+                    string: { data: { value: straightPathResult.value.value } },
+                });
+              } else {
+                console.log('добавление новой связи без значения:')
+                newLink = await deep.insert({
+                    from_id: straightPathResult.from_id,
+                    to_id: straightPathResult.to_id,
+                    type_id: straightPathResult.type_id,
+                });
               }
               if (nameLink) {
                 const contain = await deep.insert({
                   from_id: 380,
                   to_id: newLink.data[0].id,
                   type_id: 3,
+                  string: { data: { value: nameLink } },
                 });
-                await deep.update(
-                  { link_id: contain.data[0].id },
-                  { value: nameLink },
-                  { table: (typeof nameLink) + 's' }
-                ); 
                 console.log(`Добавлена контейн-связь ${contain.data[0].id} с содержимым ${nameLink}`);
-            }
+              }
 
                // обновление data.json           
               console.log(`измененно значение  в файле ${dataPath} на ${newLink.data[0]}`);
               await replaceFile(dataPath, newLink.data[0])
               // обновление названия папки-связи
               console.log(`измененно название папки-связи с  ${linkPath} на ${newLink.data[0]}`);
-              await renameFolder(linkPath, newLink.data[0])
+              await renameFolder(linkPath.path, newLink.data[0])
 
               console.log(`Добавлена связь ${originalId} из ${straightPathResult.from_id} в ${straightPathResult.to_id} с новым id ${newLink.data[0].id}`);
           }
@@ -740,7 +787,7 @@ const commandStraightSync = async (commandResults, straightPathData) => {
 
             const idFolderLink = straightPathResult.id;
 
-            const nameLinkFolder = listNameLink[idFolderLink]
+            const nameLinkFolder = listNameLink[idFolderLink] || ""
             const nameLinkCurrent = await getLinkName(idFolderLink)
 
             console.log(nameLinkFolder, 'nameLinkFolder')
@@ -748,45 +795,52 @@ const commandStraightSync = async (commandResults, straightPathData) => {
 
             console.log(idFolderLink, 'idFolderLink')
 
-            if(nameLinkCurrent != nameLinkFolder){
+            if(nameLinkCurrent != nameLinkFolder){ // нужно что-то придмать с тем, чтобы это работало и в пустых контейнах. сейчас он изменяет содержимое только если оно уже есть
+              const contain = await deep.select({ type_id: 3, to: { id: idFolderLink } })
+              console.log('попытка изменить связь', contain.data[0].id)
               await deep.update(
-                { link_id: { type_id: 3, in: { id: idFolderLink } } },
+                { link_id: contain.data[0].id },
                 { value: nameLinkFolder },
                 { table: (typeof nameLinkFolder) + 's' }
               );   
             }
-
             if (!areObjectsEqual(commandResult, straightPathResult)) {
-              let updates = {};
+              let updatesTo = {};
+              let updatesType = {};
+              let updatesFrom = {};
+              let updatesValue1 = {};
+              let updatesValue2 = {};
           
             if (commandResult.to_id !== straightPathResult.to_id)
-              updates = Object.assign(updates, { to_id: straightPathResult.to_id });
+              updatesTo = { to_id: straightPathResult.to_id };
             if (commandResult.from_id !== straightPathResult.from_id)
-              updates = Object.assign(updates, {
-                from_id: straightPathResult.from_id,
-              });
+              updatesFrom = {from_id: straightPathResult.from_id};
             if (commandResult.type_id !== straightPathResult.type_id)
-              updates = Object.assign(updates, {
-                type_id: straightPathResult.type_id,
-              });
+              updatesType = {type_id: straightPathResult.type_id};
             if (commandResult.value !== straightPathResult.value) {
-              updates = Object.assign(updates, {
-                value: straightPathResult.value,
-              });
-              updates = Object.assign(updates, {
-                table: (typeof straightPathResult.value) + 's',
-              });
-            }
-
-          
-              // Обновляем в базе данных, если есть изменения
-              if (Object.keys(updates).length > 0) {
-                await deep.update({ id: originalId }, updates);
-                console.log(`Обновлена связь с id ${originalId} на ${JSON.stringify(updates)}`);
+              console.log(commandResult.value, 'commandResult.value')
+              console.log(straightPathResult.value, 'straightPathResult.value')
+              if((straightPathResult.value != null || straightPathResult.value != undefined )&& straightPathResult.value != null){
+                if (commandResult.value.value !== straightPathResult.value.value) {
+                  updatesValue1 = { value: straightPathResult.value.value};
+                  updatesValue2 = { table: (typeof straightPathResult.value.value) + 's' };
+                } else{
+                  updatesValue1 = { value: " "};
+                  updatesValue2 = { table: 'strings' };
+                }
               }
+            }    
+            await deep.update( 
+              updatesFrom,
+              updatesTo,
+              updatesType,
+              updatesValue1,
+              {link_id: originalId },
+              updatesValue2,
+              );      
+            console.log(`Обновлена связь с id ${originalId} на`);
+            console.log(updatesTo, updatesFrom, updatesType, updatesValue1, updatesValue2)
             }
-
-            
           }
           // if (commandResult) {
           //   if (!areObjectsEqual(commandResult, straightPathResult)) {
@@ -876,17 +930,17 @@ const processResult = async (resultData, data, currentDir) => {
 
 
 
-const selectSimple = async (resultData, currentDir, subNum = null) => {
+const selectSimple = async (resultData, currentDir, subName = null) => {
   const linkList = resultData[0].data || resultData[0]; // Получаем список связей
 
-  if (subNum != null) await subClean(currentDir, linkList, subNum); // Используем номер подписки
+  if (subName != null) await subClean(currentDir, linkList, subName); // Используем номер подписки
   
   for (const link of linkList) {
       const nameLink = await getLinkName(link.id);
       
-      // Формируем имя папки в зависимости от наличия subNum
-      const newLinkDir = subNum !== null 
-          ? (nameLink ? `${link.id}__${nameLink}__${link.type_id}__${subNum}` : `${link.id}__${link.type_id}__${subNum}`)
+      // Формируем имя папки в зависимости от наличия subName
+      const newLinkDir = subName !== null 
+          ? (nameLink ? `${link.id}__${nameLink}__${link.type_id}--${subName}` : `${link.id}__${link.type_id}--${subName}`)
           : (nameLink ? `${link.id}__${nameLink}__${link.type_id}` : `${link.id}__${link.type_id}`);
       console.log(newLinkDir, 'newLinkDir')
       console.log(link.id, 'link.id')
@@ -894,12 +948,10 @@ const selectSimple = async (resultData, currentDir, subNum = null) => {
       console.log(nameLink, 'nameLink')
 
       // Создаем директорию, если её еще нет
-      createDirectory(path.join(currentDir, newLinkDir));
-      createValueFile(link, path.join(currentDir, newLinkDir));
-      createDataFile(link, path.join(currentDir, newLinkDir));
+      await createDirectory(path.join(currentDir, newLinkDir));
+      await createValueFile(link, path.join(currentDir, newLinkDir));
+      await createDataFile(link, path.join(currentDir, newLinkDir));
   }
-
-
 };
 
 
@@ -955,9 +1007,9 @@ const handleSubscription = async (subscription, currentDir, data) => {
 
 
 
-const subClean = async (currentDir, linkList, subNum) => {
+const subClean = async (currentDir, linkList, subName) => {
   const existingDirs = fs.readdirSync(currentDir)
-      .filter(file => fs.statSync(path.join(currentDir, file)).isDirectory() && file.endsWith(`__${subNum}`));
+      .filter(file => fs.statSync(path.join(currentDir, file)).isDirectory() && file.endsWith(`--${subName}`));
 
 
   const existingLinkIds = new Set(linkList.map(link => link.id));
@@ -975,13 +1027,26 @@ const subClean = async (currentDir, linkList, subNum) => {
           console.log(`Удаляем папку: ${dir}`);
           fs.rmdirSync(path.join(currentDir, dir), { recursive: true });
       } else {
-          const nameLink = await getLinkName(dirId);
+          //let nameLink = await getLinkName(dirId);
+          console.log(dirId, 'dirId')
+          let nameLink = await deep.select({
+            type_id: 3,
+            to_id: dirId,
+          });
+          console.log(nameLink.data[0].value, 'nameLink.data[0].value')
+          if (nameLink.data.length > 0) {
+            console.log(nameLink.data[0].value, 'nameLink.data[0].value')
+            if(nameLink.data[0].value == null) nameLink = undefined
+            else nameLink = nameLink.data[0].value.value;
+          } else{
+            nameLink = undefined
+          }
           console.log(nameLink, 'nameLink9999')
           const linkType = linkList.find(link => link.id === dirId).type_id;
 
           const expectedDirName = nameLink ? 
-              `${dirId}__${nameLink}__${linkType}__${subNum}` : 
-              `${dirId}__${linkType}__${subNum}`;
+              `${dirId}__${nameLink}__${linkType}--${subName}` : 
+              `${dirId}__${linkType}--${subName}`;
 
           console.log(expectedDirName, 'expectedDirName9999')
           console.log(dir, 'dir9999')
@@ -1007,7 +1072,7 @@ watch.watchTree(dirPath, async (f, curr, prev) => {
   } else if (typeof f === 'string') {
     const currentDir = path.dirname(f);
     const evalPath = path.join(currentDir, 'eval.js');
-
+    
     if (f.endsWith('eval.js')) { // Проверяем, является ли файл eval.js
       if (fs.existsSync(evalPath)) {
         // Файл существует (создание/изменение)
@@ -1022,7 +1087,7 @@ watch.watchTree(dirPath, async (f, curr, prev) => {
         // Файл удален
         if (evalData[evalPath]) {
           try {
-            createFile(evalPath, evalData[evalPath]);
+            await createFile(evalPath, evalData[evalPath]);
             console.log(`Файл eval.js был удален. Восстановлен из данных.`);
             delete evalData[evalPath];
             await executeEvalFile(evalPath, currentDir); // Выполняем после восстановления
@@ -1032,6 +1097,28 @@ watch.watchTree(dirPath, async (f, curr, prev) => {
         } else {
           console.log(`Файл eval.js был удален в ${currentDir}.`);
         }
+      }
+    }
+    if (f.endsWith('value.txt')) {
+      try {
+        const newValue = fs.readFileSync(f, 'utf8').trim(); // Считываем новое значение из value.txt
+        const dataPath = path.join(currentDir, 'data.json');
+
+        if (fs.existsSync(dataPath)) {
+          // Если файл data.json существует, заменяем значение
+          const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+
+          // Предполагается, что в data.json есть объект с полем value
+          if (data.value !== undefined || data.value !== null) {
+            data.value.value = newValue; // Заменяем значение
+            fs.writeFileSync(dataPath, JSON.stringify(data, null, 2)); // Записываем обратно в data.json
+            console.log(`Значение в data.json обновлено на: ${newValue} в директории ${currentDir}`);
+          }
+        } else {
+          console.log(`data.json не найден в директории ${currentDir}`);
+        }
+      } catch (error) {
+        console.error(`Ошибка обработки value.txt в ${currentDir}: ${error}`);
       }
     }
   }
