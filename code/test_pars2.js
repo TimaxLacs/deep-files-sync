@@ -181,6 +181,38 @@ const renameFolder = async (filedir, link) => {
 }
 
 
+const saveSubscriptionData = async (data, currentDir) => {
+  const subFileName = `sub${subscriptionCount}.js`; // Уникальное имя файла
+  const subFilePath = path.join(currentDir, subFileName);
+  try {
+      await createFile(subFilePath, data);
+      console.log(`Сохранено значение подписки в файл ${subFileName}`);
+      subscriptionCount++; // Увеличиваем счетчик для следующего файла
+      return {
+          filePath: subFilePath,
+          folderName: subFileName.replace('.js', '') // Возвращаем имя папки без формата
+      };
+  } catch (error) {
+      console.error(`Ошибка сохранения данных подписки: ${error}`);
+  }
+};
+
+
+// Функция для выполнения асинхронного кода
+const executeAsync = async (code) => {
+  return new Promise((resolve, reject) => {
+      try {
+          const func = async () => {
+              return await eval(code);
+          };
+          resolve(func());
+      } catch (err) {
+          reject(err);
+      }
+  });
+};
+
+
 
 const selectRelation = async (arrayLink, baseDir, subName = null) => {
     const idInFolder = await getIdFromFolderName(baseDir);
@@ -263,11 +295,7 @@ const passingInReturn = async (returnPath) => {
     return [relationNewName, relationOldName, returnPath];
  };
 const passingInLink = async (returnPath, arrayLink, baseDir, subName = null) => {
-  
-
-
     let data = await passingInReturn(returnPath);
-    console.log(data, 'data')
     let nameLink;
     let newLinkDir;
     if (data === undefined) return;
@@ -279,24 +307,18 @@ const passingInLink = async (returnPath, arrayLink, baseDir, subName = null) => 
     await createDirectory(newDir); 
 
 
-    console.log(arrayLink, 'arrayLink111111')
+    // console.log(arrayLink, 'arrayLink111111')
     
     if (typeof arrayLink === 'object') arrayLink = arrayLink[relationOldName];
     if(arrayLink == null) return;
     if (!Array.isArray(arrayLink)) arrayLink = [arrayLink];
 
-    console.log(arrayLink, 'arrayLink22222')
-    console.log(arrayLink.length, 'arrayLink.length22222')
+    // console.log(arrayLink, 'arrayLink22222')
+    // console.log(arrayLink.length, 'arrayLink.length22222')
     for (let i = 0; arrayLink.length > i; i++) {
-
-
-
         if (subName != null) await subClean(relationTypeDir, arrayLink, subName); // Используем номер подписки
-              
-        
 
         nameLink = await getLinkName(arrayLink[i].id);
-
         const newLinkDirName = subName !== null 
           ? (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}--${subName}` : `${arrayLink[i].id}__${arrayLink[i].type_id}--${subName}`)
           : (nameLink ? `${arrayLink[i].id}__${nameLink}__${arrayLink[i].type_id}` : `${arrayLink[i].id}__${arrayLink[i].type_id}`);
@@ -320,21 +342,6 @@ const passingInLink = async (returnPath, arrayLink, baseDir, subName = null) => 
 
 
 
-const saveSubscriptionData = async (data, currentDir) => {
-  const subFileName = `sub${subscriptionCount}.js`; // Уникальное имя файла
-  const subFilePath = path.join(currentDir, subFileName);
-  try {
-      await createFile(subFilePath, data);
-      console.log(`Сохранено значение подписки в файл ${subFileName}`);
-      subscriptionCount++; // Увеличиваем счетчик для следующего файла
-      return {
-          filePath: subFilePath,
-          folderName: subFileName.replace('.js', '') // Возвращаем имя папки без формата
-      };
-  } catch (error) {
-      console.error(`Ошибка сохранения данных подписки: ${error}`);
-  }
-};
 
 
 
@@ -344,21 +351,6 @@ const saveSubscriptionData = async (data, currentDir) => {
 
 
 
-
-
-// Функция для выполнения асинхронного кода
-const executeAsync = async (code) => {
-    return new Promise((resolve, reject) => {
-        try {
-            const func = async () => {
-                return await eval(code);
-            };
-            resolve(func());
-        } catch (err) {
-            reject(err);
-        }
-    });
-};
 
 
 const executeEvalFile = async (evalPath, currentDir) => {
@@ -415,35 +407,38 @@ const executeEvalFile = async (evalPath, currentDir) => {
 const handleRequest = async (parsedData, currentDir) => {
   let commandResults = [];
   let straightPathData = [];
-
+  let relationPathData = [];
+  
   try {
     // Обработка команды, если есть
-    if (parsedData.straightPath && parsedData.straightPath.length > 0) {
-      straightPathData = await processStraightPath(parsedData.straightPath, currentDir);
-    }
-    if (parsedData.relationPath && parsedData.relationPath.length > 0) {
-      await processRelationPath(parsedData.relationPath, currentDir);
-    }
-
-
     if (parsedData.command) {
-      console.log('Обработка команды:', parsedData.command);
       commandResults = await executeAsync(parsedData.command);
-
       commandResults = commandResults.data; // Сохраняем данные результатов
-      console.log(commandResults, 'commandResults');
+    }
 
-    
-      console.log(straightPathData, 'straightPathData');
 
-      // Теперь производим сравнение списков
-      await commandStraightSync(commandResults, straightPathData);
 
-    } else {
-        console.warn('Команда не указана, выполняем baseStraightSync.');
-        console.log(straightPathData, 'straightPathDataBASAAAAAAAAAAAAAA');
-        await baseStraightSync(straightPathData, currentDir);
+    if (parsedData.straightPath && parsedData.straightPath.length > 0) {
+      straightPathData = await processPath(parsedData.straightPath, currentDir);
+
+      if (commandResults) await commandStraightSync(commandResults, straightPathData);
+      else await noCommandStraightSync(straightPathData, currentDir);
+    }
+
+    if (parsedData.relationPath && parsedData.relationPath.length > 0) {
+      relationPathData = await processPath(parsedData.relationPath, currentDir, parsedData.command);
+      let folderRequests;
+      if (commandResults) {
+        await checResultsWithCurrent(commandResults, relationPathData);
       }
+      else {
+        folderRequests = await pathToSelect(relationPathData, currentDir);
+        for(const folderRequest of folderRequests){
+          await checResultsWithCurrent(folderRequest, relationPathData);
+        }
+      }
+    }
+
   } catch (error) {
       console.error('Ошибка при выполнении команды:', error);
       await createFile(path.join(currentDir, 'error.txt'), `${error}`);
@@ -453,11 +448,371 @@ const handleRequest = async (parsedData, currentDir) => {
 
 
 
-const baseStraightSync = async (straightPathResults, currentDir) => {
-
-  console.log(straightPathResults, 'straightPathResults000000')
 
 
+
+
+// Функция для обработки пути реляций 
+const processRelationPath = async (relationPath, currentDir, commandRes) => {
+
+
+    // нужно для того, чтобы в значении result записать значения в нужном релейшн пути. 
+
+    // если команда есть, то берем значения из нее или ее результата
+    if(commandRes){}
+
+    // если команды нет, то создаем текстовую переменную и каждый раз к ней прибавляем какое-то число или приравниваем ее к значению отношения+text
+    else{}
+
+
+
+  console.log('Обработка relationPath:', relationPath);
+
+  // Массив для хранения найденных значений
+  const results = [];
+  const listNameLink = {};
+  const pathResults = [];
+
+  // проходим по каждому пути
+  for (const userPath of relationPath) {
+      const absolutePath = path.join(currentDir, userPath);
+
+      // если есть корневая директория ------------------ сделать так, чтобы списке объектов-связей были также указания их относительного пути --- также запись значений, как в релейшн
+      if (fs.existsSync(absolutePath)) {
+          const stats = fs.statSync(absolutePath);
+
+          // Если это файл data.json ------------------ сделать так, чтобы списке объектов-связей были также указания их относительного пути
+          if (stats.isFile() && path.basename(absolutePath) === 'data.json') {
+              let data = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
+              //const folderName = path.dirname(absolutePath).split(path.sep).pop(); // Папка-связь
+              let value = fs.readFileSync(path.join(path.dirname(absolutePath), 'value.txt'), 'utf-8').trim(); // Убираем лишние пробелы
+
+              if(value == 'null') value = null
+              if(data.data) data = data.data[0]
+
+              listNameLink[data.id] = await getLinkName(data.id);
+              pathResults.push({ id: data.id, path: absolutePath });
+              results.push(data);
+
+              console.log('Значение добавлено из data.json:', data);
+          }
+          // Если это директория ------------------ сделать так, чтобы списке объектов-связей были также указания их относительного пути
+          else if (stats.isDirectory()) {
+              const files = fs.readdirSync(absolutePath);
+              const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
+              // если это папка-связь
+              if (hasRelationFiles) {
+                  // Папка-связь — обрабатываем файл data.json
+                  const dataFilePath = path.join(absolutePath, 'data.json');
+                  let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+
+                  const folderName = path.basename(absolutePath);
+                  let value = fs.readFileSync(path.join(absolutePath, 'value.txt'), 'utf-8').trim(); // Убираем лишние пробелы
+
+                  if(value == 'null') value = null
+                  if(data.data) data = data.data[0]
+                  if(folderName.split('__').length >= 3) {
+                    listNameLink[data.id] = folderName.split('__')[1];
+                  } else{
+                    listNameLink[data.id] = await getLinkName(data.id);
+                  }
+
+                  pathResults.push({ id: data.id, path: absolutePath });
+                  // Добавляем объект в массив results
+                  results.push(data);
+                  console.log('Обработаны данные связи из папки:', data);
+              } 
+
+              // если на конце стоит "~" ------------------ сделать так, чтобы списке объектов-связей были также указания их относительного пути
+              else if(userPath.endsWith("~")){
+                // рекурсивное прохождение по каждому линку в этой папке и всем последующим и их запись в объект
+                
+              }
+              // если это папка с папками-связями ------------------ сделать так, чтобы списке объектов-связей были также указания их относительного пути
+              else {
+                  // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
+                  const linkDirs = files.filter(file => fs.statSync(path.join(absolutePath, file)).isDirectory());
+
+                  for (const linkDir of linkDirs) {
+                      const linkDirPath = path.join(absolutePath, linkDir);
+                      // Запускаем рекурсивный вызов и собираем результаты
+                      const linkResults = await processRelationPath([linkDirPath], currentDir);
+                      results.push(...linkResults.results); // Делаем "распаковку" массива
+                      pathResults.push(...linkResults.pathResults); // Делаем "распаковку"массива
+                      Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
+                  }
+              }
+          }
+      } else {
+          console.warn(`Путь не существует: ${absolutePath}`);
+      }
+  }
+  return { results: results, listNameLink: listNameLink, path: pathResults }; // Возвращаем результаты и список имен ссылок
+};
+
+
+
+const processPath = async (straightPath, currentDir, mode, commandRelation) => {
+  console.log('Обработка straightPath:', straightPath);
+
+
+  if(!commandRelation){}
+  else if(commandRelation || commandRelation != null){}
+  
+  
+  // Массив для хранения найденных значений
+  const results = [];
+  const listNameLink = {};
+  const pathResults = [];
+  let nameLink;
+  for (const userPath of straightPath) {
+      let absolutePath = path.join(currentDir, userPath);
+
+      // Проверяем, существует ли путь
+
+      if(path.basename(absolutePath) === 'data.json'){
+        absolutePath = path.dirname(absolutePath).split(path.sep).pop();
+      }
+
+      if (!fs.existsSync(absolutePath)) {
+
+          const lastDirectory = path.basename(path.dirname(linkPath));
+
+          // 3. Извлекаем первое значение, разделенное "__" в последней директории.
+          const firstValue = lastDirectory.split('__')[0];
+  
+          // 4. Проверяем, существует ли папка с таким же первым значением в более внешней директории.
+          const parentDirectory = path.dirname(path.dirname(linkPath));
+          absolutePath = fs.readdirSync(parentDirectory).find(folder => folder.startsWith(`${firstValue}__`));  
+        }
+
+
+      if (fs.existsSync(absolutePath)) {
+        const stats = fs.statSync(absolutePath);
+
+        // Если это файл data.json
+        if (stats.isFile() && path.basename(absolutePath) === 'data.json') { // Открываем файл и добавляем значение в список
+
+            let data = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
+            data = {...data}
+            if(data.data) data = data.data[0]
+
+            const folderName = path.dirname(absolutePath).split(path.sep).pop(); // Папка-связь
+            let value = fs.readFileSync(path.join(path.dirname(absolutePath), 'value.txt'), 'utf-8')
+
+            
+            if(value == 'null') value = null
+            if(data.value || data.value != null) {
+              if(data.value.value != value) data.value.value = value;
+            }
+
+            // Получаем имя ссылки 
+            if(folderName.split('__').length >= 3) nameLink = folderName.split('__')[1];
+            else nameLink = await getLinkName(data.id);
+            if(mode == 'straight'){
+              listNameLink[data.id] = nameLink;
+              pathResults.push({ id: data.id, path: absolutePath });
+              results.push(data);
+            }
+            else if(mode == 'relation'){
+              listNameLink[data.id] = nameLink;
+              pathResults.push({ id: data.id, path: absolutePath });
+              data = await pathToObj(absolutePath, data)
+              //results.push(data);
+            }
+        }
+        // Если это директория
+        else if (stats.isDirectory()) {
+            const files = fs.readdirSync(absolutePath);
+            const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
+
+            // если папка - папка-связь
+            if (hasRelationFiles) {
+              // Папка-связь — обрабатываем файл data.json
+              const dataFilePath = path.join(absolutePath, 'data.json');
+              const folderName = path.basename(absolutePath);
+              let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+              data = {...data}
+              if(data.data) data = data.data[0]
+            
+
+              // Читаем значение из value.txt
+              let value = fs.readFileSync(path.join(absolutePath, 'value.txt'), 'utf-8')
+              if(value == 'null') value = null
+              if(data.value || data.value != null) {
+                if(data.value.value != value) data.value.value = value;
+              }
+
+              // Получаем имя ссылки 
+              if(folderName.split('__').length >= 3) nameLink = folderName.split('__')[1];
+              else nameLink = await getLinkName(data.id);
+
+              if(mode == 'straight'){
+                listNameLink[data.id] = nameLink
+                pathResults.push({ id: data.id, path: absolutePath });
+                results.push(data);
+              }
+              else if(mode == 'relation'){
+                listNameLink[data.id] = nameLink;
+                pathResults.push({ id: data.id, path: absolutePath });
+                data = await pathToObj(absolutePath, data)
+                //results.push(data);
+              }
+              console.log('Обработаны данные связи из папки:', data);
+            } 
+            // если нужны все папки внутри только этой директории
+            else if(userPath.endsWith("~")){
+              // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
+              const linkDirs = files.filter(file => fs.statSync(path.join(absolutePath, file)).isDirectory());
+
+              for (const linkDir of linkDirs) {
+                const dataFilePath = path.join(linkDir, 'data.json');
+                const folderName = path.basename(linkDir);
+                let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+                data = {...data}
+                if(data.data) data = data.data[0]
+              
+
+                // Читаем значение из value.txt
+                let value = fs.readFileSync(path.join(linkDir, 'value.txt'), 'utf-8')
+                if(value == 'null') value = null
+                if(data.value || data.value != null) {
+                  if(data.value.value != value) data.value.value = value;
+                }
+
+                // Получаем имя ссылки 
+                if(folderName.split('__').length >= 3) nameLink = folderName.split('__')[1];
+                else nameLink = await getLinkName(data.id);
+
+                if(mode == 'straight'){
+                  listNameLink[data.id] = nameLink
+                  pathResults.push({ id: data.id, path: linkDir });
+                  results.push(data);
+                }
+                else if(mode == 'relation'){
+                  listNameLink[data.id] = nameLink;
+                  pathResults.push({ id: data.id, path: linkDir });
+                  data = await pathToObj(linkDir, data)
+                  //results.push(data);
+                }
+
+                console.log('Обработаны данные связи из папки:', data);
+              }
+            }
+
+            // пробуем поиск по релейшену
+            else{
+              // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
+              const linkDirs = files.filter(file => fs.statSync(path.join(absolutePath, file)).isDirectory());
+
+              for (const linkDir of linkDirs) {
+                
+                const linkDirPath = path.join(absolutePath, linkDir);
+                // Запускаем рекурсивный вызов и собираем результаты
+                const linkResults = await processPath([linkDirPath], currentDir);
+
+                if(mode == 'straight'){
+                  results.push(...linkResults.results); // Делаем "распаковку" массива
+                  pathResults.push(...linkResults.pathResults); // Делаем "распаковку"массива
+                  Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
+                }
+                else if(mode == 'relation'){
+                  data = {...linkResults.results}
+                  data = await pathToObj(linkDir, data)
+                  //results.push(data); 
+                  pathResults.push(...linkResults.pathResults); // Делаем "распаковку"массива
+                  Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
+                }
+              }
+            }
+        }
+      } 
+      else {
+
+        await deep.delete()
+      
+        console.warn(`Путь не существует: ${absolutePath}`);
+      }
+  }
+
+  return { results: results, listNameLink: listNameLink, path: pathResults }; // Возвращаем результаты и список имен ссылок
+};
+
+
+
+
+const pathToObj = async (folderPath, data, relations = {}) => {
+
+  if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
+    console.error('Invalid current directory');
+    return data;
+  }
+
+  const segments = folderPath.split(path.sep);
+  let currentObject = data;
+  let foundData = false;
+  let relationsPath = relations;
+
+  for (let i = 0; i < segments.length; i++) {
+    let pathSoFar = '';
+    for (let j = 0; j <= i; j++) {
+      pathSoFar = path.join(pathSoFar, segments[j]);
+    }
+
+    if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
+      const dataFilePath = path.join(pathSoFar, 'data.json');
+
+      if (fs.existsSync(dataFilePath)) {
+        const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+
+        let relationName = segments[i] + 'Text';
+        for (const key in relationsPath) {
+          if (relationsPath[key].relation === segments[i]) {
+            relationName = key;
+            relationsPath = relationsPath[key].return;
+            break;
+          }
+        }
+
+        if (!currentObject.some(obj => obj.hasOwnProperty(relationName))) {
+          currentObject.push({ [relationName]: newData });
+        } else {
+          const existingObject = currentObject.find(obj => obj.hasOwnProperty(relationName));
+          Object.assign(existingObject[relationName], newData);
+        }
+
+        currentObject = currentObject.find(obj => obj.hasOwnProperty(relationName))[relationName];
+        foundData = true;
+      } else {
+        if (!foundData) { // Пропускаем каталог, если не нашли data.json
+          continue; 
+        } else {
+          let relationName = segments[i] + 'Text';
+          for (const key in relationsPath) {
+            if (relationsPath[key].relation === segments[i]) {
+              relationName = key;
+              relationsPath = relationsPath[key].return;
+              break;
+            }
+          }
+
+          if (!currentObject.some(obj => obj.hasOwnProperty(relationName))) {
+            currentObject.push({ [relationName]: [] });
+          }
+
+          currentObject = currentObject.find(obj => obj.hasOwnProperty(relationName))[relationName];
+        }
+      }
+    }
+  }
+
+  if (!foundData) currentObject = [];
+  return data;
+}
+
+
+
+const noCommandStraightSync = async (straightPathResults, currentDir) => {
 
   for (const linkFolder of straightPathResults.results) {
 
@@ -470,8 +825,6 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
       console.log(linkPath, 'linkPath')
       console.log(linkId, 'linkId')
       const dataPath = path.join(linkPath.path, 'data.json');
-
-
 
       
       // Проверка существования связи в БД по linkId
@@ -581,126 +934,6 @@ const baseStraightSync = async (straightPathResults, currentDir) => {
 
 
 
-// Функция для обработки пути реляций
-const processRelationPath = async (relationPath, currentDir) => {
-  console.log('Обработка relationPath:', relationPath);
-  
-};
-
-const processStraightPath = async (straightPath, currentDir) => {
-  console.log('Обработка straightPath:', straightPath);
-
-  // Массив для хранения найденных значений
-  const results = [];
-  const listNameLink = {};
-  const pathResults = [];
-  for (const userPath of straightPath) {
-      const absolutePath = path.join(currentDir, userPath);
-
-      // Проверяем, существует ли путь
-      if (fs.existsSync(absolutePath)) {
-          const stats = fs.statSync(absolutePath);
-
-          // Если это файл data.json
-          if (stats.isFile() && path.basename(absolutePath) === 'data.json') {
-              // Открываем файл и добавляем значение в список
-              let data = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
-
-              // Получаем id из имени родительской папки
-              const folderName = path.dirname(absolutePath).split(path.sep).pop(); // Папка-связь
-              const linkId = folderName.split('__')[0];
-
-              // Читаем значение из value.txt
-              let value = fs.readFileSync(path.join(path.dirname(absolutePath), 'value.txt'), 'utf-8').trim(); // Убираем лишние пробелы
-              console.log(data, 'data2222');
-
-              if(value == 'null') value = null
-              // Обновляем объект
-              //data = { ...data, value, id: Number(linkId) };   // Устанавливаем id из имени папки
-              console.log(data, 'data3333');
-
-              // Получаем имя ссылки и добавляем в список
-              if(data.data) data = data.data[0]
-              console.log(data, '5556666');
-              listNameLink[data.id] = await getLinkName(data.id);
-              
-              console.log(listNameLink, 'listNameLink3333');
-
-              pathResults.push({ id: data.id, path: absolutePath });
-              // Добавляем объект в массив results
-              results.push(data);
-              console.log('Значение добавлено из data.json:', data);
-          }
-          // Если это директория
-          else if (stats.isDirectory()) {
-              const files = fs.readdirSync(absolutePath);
-              const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
-
-              if (hasRelationFiles) {
-                  // Папка-связь — обрабатываем файл data.json
-                  const dataFilePath = path.join(absolutePath, 'data.json');
-                  let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-
-                  const folderName = path.basename(absolutePath);
-
-                
-
-                  // Читаем значение из value.txt
-                  let value = fs.readFileSync(path.join(absolutePath, 'value.txt'), 'utf-8').trim(); // Убираем лишние пробелы
-                  console.log(data, 'data2222');
-
-                  // Обновляем объект
-                  if(value == 'null') value = null
-                  //data = { ...data, value, id: Number(linkId) }; // Устанавливаем id из имени папки
-                  console.log(data, 'data3333444');
-                  if(data.data) data = data.data[0]
-                  console.log(data, '5556666');
-                  // Получаем имя ссылки и добавляем в список
-                  console.log(folderName.split('__'), 'folderName.split()' )
-                  if(folderName.split('__').length >= 3) {
-                    listNameLink[data.id] = folderName.split('__')[1];
-                    console.log(folderName.split('__')[1], 'folderName.split()[2]');
-                  } else{
-                    listNameLink[data.id] = await getLinkName(data.id);
-                    console.log(listNameLink, 'listNameLink2222');
-                  }
-
-                  console.log(listNameLink, 'listNameLink3333');
-
-                  pathResults.push({ id: data.id, path: absolutePath });
-                  // Добавляем объект в массив results
-                  results.push(data);
-                  console.log('Обработаны данные связи из папки:', data);
-              } else {
-                  // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-                  const subDirs = files.filter(file => fs.statSync(path.join(absolutePath, file)).isDirectory());
-
-                  for (const subDir of subDirs) {
-
-
-  
-                    
-                      const subDirPath = path.join(absolutePath, subDir);
-                      // Запускаем рекурсивный вызов и собираем результаты
-                      const subResults = await processStraightPath([subDirPath], currentDir);
-                      results.push(...subResults.results); // Делаем "распаковку" массива
-                      pathResults.push(...subResults.pathResults); // Делаем "распаковку"массива
-                      Object.assign(listNameLink, subResults.listNameLink); // Объединяем списки имен ссылок
-                  }
-              }
-          }
-      } else {
-          console.warn(`Путь не существует: ${absolutePath}`);
-      }
-  }
-
-  return { results: results, listNameLink: listNameLink, path: pathResults }; // Возвращаем результаты и список имен ссылок
-};
-
-
-
-
-
 const commandStraightSync = async (commandResults, straightPathData) => {
   let listNameLink = straightPathData.listNameLink
   let listValueDataLink = straightPathData.results
@@ -804,31 +1037,31 @@ const commandStraightSync = async (commandResults, straightPathData) => {
                 { table: (typeof nameLinkFolder) + 's' }
               );   
             }
-            if (!areObjectsEqual(commandResult, straightPathResult)) {
+            if (JSON.stringify(commandResult) !== JSON.stringify(straightPathResult)) {
               let updatesTo = {};
               let updatesType = {};
               let updatesFrom = {};
               let updatesValue1 = {};
               let updatesValue2 = {};
           
-            if (commandResult.to_id !== straightPathResult.to_id)
-              updatesTo = { to_id: straightPathResult.to_id };
-            if (commandResult.from_id !== straightPathResult.from_id)
-              updatesFrom = {from_id: straightPathResult.from_id};
-            if (commandResult.type_id !== straightPathResult.type_id)
-              updatesType = {type_id: straightPathResult.type_id};
-            if (commandResult.value !== straightPathResult.value) {
-              console.log(commandResult.value, 'commandResult.value')
-              console.log(straightPathResult.value, 'straightPathResult.value')
-              if((straightPathResult.value != null || straightPathResult.value != undefined )&& straightPathResult.value != null){
-                if (commandResult.value.value !== straightPathResult.value.value) {
-                  updatesValue1 = { value: straightPathResult.value.value};
-                  updatesValue2 = { table: (typeof straightPathResult.value.value) + 's' };
-                } else{
-                  updatesValue1 = { value: " "};
-                  updatesValue2 = { table: 'strings' };
+              if (commandResult.to_id !== straightPathResult.to_id)
+                updatesTo = { to_id: straightPathResult.to_id };
+              if (commandResult.from_id !== straightPathResult.from_id)
+                updatesFrom = {from_id: straightPathResult.from_id};
+              if (commandResult.type_id !== straightPathResult.type_id)
+                updatesType = {type_id: straightPathResult.type_id};
+              if (commandResult.value !== straightPathResult.value) {
+                console.log(commandResult.value, 'commandResult.value')
+                console.log(straightPathResult.value, 'straightPathResult.value')
+                if((straightPathResult.value != null || straightPathResult.value != undefined )&& straightPathResult.value != null){
+                  if (commandResult.value.value !== straightPathResult.value.value) {
+                    updatesValue1 = { value: straightPathResult.value.value};
+                    updatesValue2 = { table: (typeof straightPathResult.value.value) + 's' };
+                  } else{
+                    updatesValue1 = { value: " "};
+                    updatesValue2 = { table: 'strings' };
+                  }
                 }
-              }
             }    
             await deep.update( 
               updatesFrom,
@@ -899,10 +1132,74 @@ const commandStraightSync = async (commandResults, straightPathData) => {
 };
 
 
-const areObjectsEqual = (obj1, obj2) => {
-  // Здесь можно добавить более детальную логику сравнения
-  return JSON.stringify(obj1) === JSON.stringify(obj2);
-};
+// строим из пути запрос relation
+const pathToSelect = async(relationPathData, currentDir) =>{
+
+  let result = relationPathData.result;
+  let path = relationPathData.path;
+  let listNameLink = relationPathData.listNameLink;
+  
+
+  
+  // проверяем связь ли в корне
+  if(){}
+
+   // если нет, то находим первую связь в корне
+  else{}
+
+  // делаем связь в корне отправной точкой реелйшн запроса
+
+  
+  let selectLink; // список запросов. повторяющиеся не учитываются
+
+
+  //перебираем остальной путь и добавляем в запрос
+  for(){
+    // обновляем список запросов, если такого значения еще нет
+    // 
+
+  }
+
+  // выполняем наши запросы 
+  for(){
+    // функция запросов в БД
+    // обращяемся к уже существуюищм функциям разбора запросов
+
+    // обновляем список выпода запроса
+  }
+  
+  // выхов функции проверки значений
+
+}
+
+
+
+
+
+const checResultsWithCurrent = async(pathObjLink, ResultObjLink) =>{
+
+  // перебор всех связей
+    for(){
+    // цикл рекурсивной проверки 
+    for(){
+
+      // если такой связи нет в БД - создаем ее и, если есть ~, то все последующие
+      if(){}
+
+      // если такой связи нет в Папках - удаляем и, если есть ~, то все последующие
+      else if(){}
+      
+      // если связь есть, но она другая - изменяем соответсвенно
+      else{}
+
+    }
+  }
+
+}
+
+
+
+
 
 
 const processResult = async (resultData, data, currentDir) => {
@@ -1162,104 +1459,3 @@ async function updateDataFile(dataFilePath, newDir) {
     throw error;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  // const processStraightPath = async (straightPath, currentDir) => {
-  //   console.log('Обработка straightPath:', straightPath);
-  
-  //   // Массив для хранения найденных значений
-  //   const results = [];
-  //   const listNameLink = {};
-  //   const pathResults = []; // Новый массив для хранения { id, path }
-  //   let data;
-  //   for (const userPath of straightPath) {
-  //       const absolutePath = path.join(currentDir, userPath);
-  //       // Проверяем, существует ли путь
-  //       if (fs.existsSync(absolutePath)) {
-  //           const stats = fs.statSync(absolutePath);
-  
-  //           // Если это файл data.json
-  //           if (stats.isFile() && path.basename(absolutePath) === 'data.json') {
-  //               data = JSON.parse(fs.readFileSync(absolutePath, 'utf-8'));
-  
-  //               // Получаем id из имени родительской папки
-  //               const folderName = path.dirname(absolutePath).split(path.sep).pop(); // Папка-связь
-  //               const linkId = folderName.split('__')[0];
-  
-  //               // Читаем значение из value.txt
-  //               const value = fs.readFileSync(path.join(path.dirname(absolutePath), 'value.txt'), 'utf-8');
-  //               console.log(data, 'data2222');
-  
-  //               // Обновляем объект
-  //               data = { ...data, value, id: Number(linkId) };   // Устанавливаем id из имени папки
-  //               console.log(data, 'data3333');
-  
-  //               listNameLink[data.id] = await getLinkName(data.id);
-  //               console.log(listNameLink, 'listNameLink3333');
-  
-  //               // Добавляем объект в массив pathResults
-  //               pathResults.push({ id: data.id, path: absolutePath });
-  //               console.log('Значение добавлено из data.json:', data);
-  //           }
-  //           // Если это директория
-  //           else if (stats.isDirectory()) {
-  //               const files = fs.readdirSync(absolutePath);
-  //               const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
-  
-  //               if (hasRelationFiles) {
-  //                   // Папка-связь — обрабатываем файл data.json
-  //                   const dataFilePath = path.join(absolutePath, 'data.json');
-  //                   data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-  
-  //                   const folderName = path.basename(absolutePath);
-  //                   const linkId = folderName.split('__')[0];
-  
-  //                   // Читаем значение из value.txt
-  //                   const value = fs.readFileSync(path.join(absolutePath, 'value.txt'), 'utf-8');
-  //                   console.log(data, 'data2222');
-  
-  //                   // Обновляем объект
-  //                   data = { ...data, value, id: Number(linkId) }; // Устанавливаем id из имени папки
-  //                   console.log(data, 'data3333');
-  
-  //                   listNameLink[data.id] = await getLinkName(data.id);
-  //                   console.log(listNameLink, 'listNameLink3333');
-
-                    
-  //                   // Добавляем объект в массив pathResults
-  //                   pathResults.push({ id: data.id, path: absolutePath });
-  //                   console.log('Обработаны данные связи из папки:', data);
-  //               } else {
-  //                   // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-  //                   const subDirs = files.filter(file => fs.statSync(path.join(absolutePath, file)).isDirectory());
-  
-  //                   for (const subDir of subDirs) {
-  //                       const subDirPath = path.join(absolutePath, subDir);
-  //                       // Запускаем рекурсивный вызов и собираем результаты
-  //                       const subResults = await processStraightPath([subDirPath], currentDir);
-  //                       pathResults.push(...subResults.pathResults); // Делаем "распаковку"массива
-  //                       Object.assign(listNameLink, subResults.listNameLink); // Объединяем списки имен ссылок
-  //                   }
-  //               }
-  //           }
-  //       } else {
-  //           console.warn(`Путь не существует: ${absolutePath}`);
-  //       }
-  //   }
-  
-  //   return { results: data, listNameLink: listNameLink, path: pathResults }; // Возвращаем результаты, список имен ссылок и пути
-  // };
-
