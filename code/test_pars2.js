@@ -633,7 +633,7 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
         else if(mode == 'relation'){
           listNameLink[data.id] = nameLink;
           pathResults.push({ id: data.id, path: absoluteCleanPath });
-          data = await pathToObj(absoluteCleanPath, data)
+          data = await pathToObjResultAndSelect(absoluteCleanPath, data)
           //results.push(data);
         }
         console.log('Обработаны данные связи из папки:', data);
@@ -675,7 +675,7 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
           else if(mode == 'relation'){
             listNameLink[data.id] = nameLink;
             pathResults.push({ id: data.id, path: linkDir });
-            data = await pathToObj(linkDir, data)
+            data = await pathToObjResultAndSelect(linkDir, data)
             //results.push(data);
           }
 
@@ -702,7 +702,7 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
           }
           else if(mode == 'relation'){
             data = {...linkResults.results}
-            data = await pathToObj(linkDir, data)
+            data = await pathToObjResultAndSelect(linkDir, data)
             //results.push(data); 
             pathResults.push(...linkResults.pathResults); // Делаем "распаковку"массива
             Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
@@ -722,7 +722,7 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
 
 
 
-const pathToObj = async (folderPath, data, relations = {}) => {
+const pathToObjResultAndSelect = async (folderPath, data, relations = {}) => {
 
   if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
     console.error('Invalid current directory');
