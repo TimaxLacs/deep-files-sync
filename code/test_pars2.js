@@ -182,21 +182,21 @@ const renameFolder = async (filedir, link) => {
 
 
 // Функция для сохранения данных подписки в файл
-const saveSubscriptionData = async (data, currentDir, type) => {
-  const subFileName = `sub${type}${subscriptionCount}.json`; // Уникальное имя файла
-  const subFilePath = path.join(currentDir, subFileName);
-  try {
-      fs.writeFileSync(subFilePath, JSON.stringify(data, null, 2));
-      console.log(`Сохранено значение подписки в файл ${subFileName}`);
-      subscriptionCount++; // Увеличиваем счетчик для следующего файла
-      return {
-          filePath: subFilePath,
-          folderName: subFileName.replace('.json', '') // Возвращаем имя папки без формата
-      };
-  } catch (error) {
-      console.error(`Ошибка сохранения данных подписки: ${error}`);
-  }
-};
+// const saveSubscriptionData = async (data, currentDir, type) => {
+//   const subFileName = `sub${type}${subscriptionCount}.json`; // Уникальное имя файла
+//   const subFilePath = path.join(currentDir, subFileName);
+//   try {
+//       fs.writeFileSync(subFilePath, JSON.stringify(data, null, 2));
+//       console.log(`Сохранено значение подписки в файл ${subFileName}`);
+//       subscriptionCount++; // Увеличиваем счетчик для следующего файла
+//       return {
+//           filePath: subFilePath,
+//           folderName: subFileName.replace('.json', '') // Возвращаем имя папки без формата
+//       };
+//   } catch (error) {
+//       console.error(`Ошибка сохранения данных подписки: ${error}`);
+//   }
+// };
 
 
 // Функция для выполнения асинхронного кода
@@ -1280,16 +1280,19 @@ const subClean = async (currentDir, linkList, subName) => {
 };
 
 
-// Функция для обработки подписки на основе файла
+
+// Функция для обработки подписки и настройки наблюдателей
 const handleSubscriptionOut = async (data, currentDir) => {
+  // Сохранение данных подписки в файл
   const subscriptionData = await saveSubscriptionData(data, currentDir, 'Out');
+  
+  // Если данные успешно сохранены, настраиваем наблюдателей
   if (subscriptionData.filePath) {
       const monitoredPaths = data.relationPath.concat(data.straightPath);
 
-      // Создаем массив для хранения наблюдателей
-      const watchers = monitoredPaths.map((monitoredPath) => {
+      monitoredPaths.forEach((monitoredPath) => {
           const fullPath = path.resolve(currentDir, monitoredPath);
-          return fs.watch(fullPath, async (eventType, filename) => {
+          fs.watch(fullPath, async (eventType, filename) => {
               if (filename) {
                   console.log(`Изменение обнаружено в: ${fullPath}`);
                   await handleRequest(data, currentDir, fullPath);
@@ -1297,19 +1300,14 @@ const handleSubscriptionOut = async (data, currentDir) => {
           });
       });
 
-      // Сохраняем подписку и ее наблюдателей в активные подписки
-      activeSubscriptions[subscriptionData.filePath] = {
-          watchers: watchers,
-          filePath: subscriptionData.filePath
-      };
-
       // Для обработки отмены подписки
       fs.watchFile(subscriptionData.filePath, (curr, prev) => {
           if (!fs.existsSync(subscriptionData.filePath)) {
               console.log('Файл подписки удален. Отписываемся...');
-              activeSubscriptions[subscriptionData.filePath].watchers.forEach(watcher => watcher.close());
+              monitoredPaths.forEach(monitoredPath => {
+                  fs.unwatchFile(monitoredPath);
+              });
               fs.unwatchFile(subscriptionData.filePath);
-              delete activeSubscriptions[subscriptionData.filePath];
           }
       });
   } else {
@@ -1317,6 +1315,33 @@ const handleSubscriptionOut = async (data, currentDir) => {
   }
 };
 
+// Функция для загрузки и восстановления всех подписок при старте
+const loadSubscriptionsOnStartup = (currentDir) => {
+  const files = fs.readdirSync(currentDir);
+  files.forEach(file => {
+      if (file.startsWith('subOut') && file.endsWith('.json')) {
+          const subscriptionFilePath = path.join(currentDir, file);
+          const data = JSON.parse(fs.readFileSync(subscriptionFilePath, 'utf8'));
+          handleSubscriptionOut(data, currentDir); // Восстанавливаем подписку
+      }
+  });
+};
+
+// Функция для сохранения данных подписки в файл
+const saveSubscriptionData = async (data, currentDir, type) => {
+  const subFileName = `sub${type}${Date.now()}.json`; // Уникальное имя файла на основе времени
+  const subFilePath = path.join(currentDir, subFileName);
+  try {
+      fs.writeFileSync(subFilePath, JSON.stringify(data, null, 2));
+      console.log(`Сохранено значение подписки в файл ${subFileName}`);
+      return {
+          filePath: subFilePath,
+          folderName: subFileName.replace('.json', '') // Возвращаем имя папки без формата
+      };
+  } catch (error) {
+      console.error(`Ошибка сохранения данных подписки: ${error}`);
+  }
+};
 
 
 watch.watchTree(dirPath, async (f, curr, prev) => {
