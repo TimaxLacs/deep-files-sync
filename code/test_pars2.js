@@ -199,6 +199,35 @@ const renameFolder = async (filedir, link) => {
 // };
 
 
+// Функция для загрузки и восстановления всех подписок при старте
+const loadSubscriptionsOnStartup = (currentDir) => {
+  const files = fs.readdirSync(currentDir);
+  files.forEach(file => {
+      if (file.startsWith('subOut') && file.endsWith('.json')) {
+          const subscriptionFilePath = path.join(currentDir, file);
+          const data = JSON.parse(fs.readFileSync(subscriptionFilePath, 'utf8'));
+          handleSubscriptionOut(data, currentDir); // Восстанавливаем подписку
+      }
+  });
+};
+loadSubscriptionsOnStartup(dirPath)
+
+// Функция для сохранения данных подписки в файл
+const saveSubscriptionData = async (data, currentDir, type) => {
+  const subFileName = `sub${type}${Date.now()}.json`; // Уникальное имя файла на основе времени
+  const subFilePath = path.join(currentDir, subFileName);
+  try {
+      fs.writeFileSync(subFilePath, JSON.stringify(data, null, 2));
+      console.log(`Сохранено значение подписки в файл ${subFileName}`);
+      return {
+          filePath: subFilePath,
+          folderName: subFileName.replace('.json', '') // Возвращаем имя папки без формата
+      };
+  } catch (error) {
+      console.error(`Ошибка сохранения данных подписки: ${error}`);
+  }
+};
+
 // Функция для выполнения асинхронного кода
 const executeAsync = async (code) => {
   return new Promise((resolve, reject) => {
@@ -1315,33 +1344,6 @@ const handleSubscriptionOut = async (data, currentDir) => {
   }
 };
 
-// Функция для загрузки и восстановления всех подписок при старте
-const loadSubscriptionsOnStartup = (currentDir) => {
-  const files = fs.readdirSync(currentDir);
-  files.forEach(file => {
-      if (file.startsWith('subOut') && file.endsWith('.json')) {
-          const subscriptionFilePath = path.join(currentDir, file);
-          const data = JSON.parse(fs.readFileSync(subscriptionFilePath, 'utf8'));
-          handleSubscriptionOut(data, currentDir); // Восстанавливаем подписку
-      }
-  });
-};
-
-// Функция для сохранения данных подписки в файл
-const saveSubscriptionData = async (data, currentDir, type) => {
-  const subFileName = `sub${type}${Date.now()}.json`; // Уникальное имя файла на основе времени
-  const subFilePath = path.join(currentDir, subFileName);
-  try {
-      fs.writeFileSync(subFilePath, JSON.stringify(data, null, 2));
-      console.log(`Сохранено значение подписки в файл ${subFileName}`);
-      return {
-          filePath: subFilePath,
-          folderName: subFileName.replace('.json', '') // Возвращаем имя папки без формата
-      };
-  } catch (error) {
-      console.error(`Ошибка сохранения данных подписки: ${error}`);
-  }
-};
 
 
 watch.watchTree(dirPath, async (f, curr, prev) => {
