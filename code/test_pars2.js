@@ -446,117 +446,108 @@ const handleRequest = async (parsedData, currentDir) => {
 
 
 const checResultsWithCurrent = async (folderRequestResult, relationPathData) => {
+  // Функция processLinks обрабатывает сравнение и синхронизацию двух связей
+  const processLinks = async (link1, link2) => {
+    // Обрабатываем новые связи, которых нет в link1, но есть в link2
+    await processNewLinks(link2.filter((link) => !link1.find((result) => result.id === link.id)));
+    // Обрабатываем удаление связей, которые есть в link1, но отсутствуют в link2
+    await processRemoval(link1, link2);
 
- 
-  // 2. Проверяем, есть ли в folderRequestResult объекты, которые не имеют аналогов в relationPathData.results.
-  const existingLinks = folderRequestResult.filter((link) => relationPathData.results.find((result) => result.id === link.id));
- 
-  // 3. Сравниваем ключи объектов, которые имеют аналоги в обоих списках.
-  for (const existingLink of folderRequestResult) {
-    const relationPathDataLink = relationPathData.results.find((result) => result.id === existingLink.id);
-    let stack = [existingLink, relationPathDataLink]; 
+    // Оставляем только те связи в link1, которые есть и в link2
+    link1 = link1.filter((link) => link2.find((result) => result.id === link.id));
 
-
-
-    while (stack.length > 0) {
-      let [link1, link2] = stack.pop();
-
-
-
-
-
-      
-      //const link2Item = link2.find((item) => item.id === link1.id);
-      // 1. Проверяем, есть ли в relationPathData.results объекты, которые не имеют аналогов в folderRequestResult.
-      const newLinks = link2.filter((link) => !link1.find((result) => result.id === link.id));
-      for (const newLink of newLinks) {
-        // 1.1. Проверяем, существует ли объект в базе данных.
-        const link = await deep.select({ id: newLink.id });
-        if (!link) {
-          // 1.2. Если объекта нет в базе данных, добавляем его.
-          if (!newLink.value) {
-            await deep.insert({
-              from_id: newLink.from_id,
-              type_id: newLink.type_id,
-              to_id: newLink.to_id,
-            });
-          } else {
-            await deep.insert({
-              from_id: newLink.from_id,
-              type_id: newLink.type_id,
-              to_id: newLink.to_id,
-              string: { data: { value: newLink.value.value } },
-            });
-          }
+    // Проходим по каждому ключу в link1 и сравниваем его с соответствующим значением в link2
+    for (const key of Object.keys(link1)) {
+      if (link1[key] !== link2[key]) {
+        if (typeof link1[key] !== 'object') {
+          // Если значение простое (не объект), обновляем его
+          await deep.update({ link_id: link1.id }, { [key]: link1[key] });
+        } else if (key === 'value' && typeof link1[key] === 'object') {
+          // Если значение — объект и ключ "value", обрабатываем отдельно
+          await deep.update({ link_id: link1.id }, { value: link1[key] }, { table: (typeof link1[key]) + 's' });
         } else {
-          // 1.3. Если объект существует в базе данных, обновляем его.
-          if (!newLink.value) {
-            await deep.update(
-              { link_id: newLink._id },
-              { from_id: newLink.from_id },
-              { type_id: newLink.type_id },
-              { to_id: newLink.to_id },
-            );
-          } else {
-            await deep.update(
-              { link_id: newLink._id },
-              { from_id: newLink.from_id },
-              { type_id: newLink.type_id },
-              { to_id: newLink.to_id },
-              { value: newLink.value.value },
-              { table: (typeof newLink.value.value) + 's' }
-            );
-          }
-        }
-      }
+          // Если значение — объект (или массив объектов), углубляемся
+          const link1Value = Array.isArray(link1[key]) ? link1[key] : [link1[key]];
+          const link2Value = Array.isArray(link2[key]) ? link2[key] : [link2[key]];
 
+          // Рекурсивно вызываем processLinks для обработки вложенных объектов
+          for (let i = 0; i < link1Value.length; i++) {
+            if (link2Value[i]) {
+              await processLinks(link1Value[i], link2Value[i]);
+            } else {
+              const data = {
+                from_id: link1Value[i].from_id,
+                type_id: link1Value[i].type_id,
+                to_id: link1Value[i].to_id,
+              };
 
-      // 4. Удаляем объекты, которые есть в folderRequestResult, но нет в relationPathData.results.
-      for (const link of link1) {
-        if (!link2.find((result) => result.id === link.id)) {
-          await deep.delete({ id: link.id });
-        }
-      }
+              if (link1Value[i].value) {
+                data.string = { data: { value: link1Value[i].value.value } }
+              }
 
-      link1 = link1.filter((link) => link2.find((result) => result.id === link.id));
-
-      const keys1 = Object.keys(link1);
-      for (const key of keys1) {
-        if (link1[key] !== link2[key]) {
-          // 3.1. Обновляем значение в базе данных, если ключи отличаются.
-          if (typeof link1[key] !== 'object') {
-            await deep.update({ link_id: link1.id }, { [key]: link1[key] });
-          } else if (key === 'value' && typeof link1[key] === 'object') {
-            // 3.2. Обновляем значение в базе данных, если ключ является объектом.
-            await deep.update(
-              { link_id: link1.id },
-              { value: link1[key] },
-              { table: (typeof link1[key]) + 's' }
-            );
-          } else {
-            // 3.3. Добавляем в стек объекты, которые содержат в себе другие объекты связи.
-            const link1Value = Array.isArray(link1[key]) ? link1[key] : [link1[key]];
-            const link2Value = Array.isArray(link2[key]) ? link2[key] : [link2[key]];
-
-            stack.push([link1Value, link2Value]);
-
-
-            for (const link1Item of link1Value) {
-              stack.push([link1Item, link2Item]);
-              // const link2Item = link2Value.find((item) => item.id === link1Item.id);
-              // if (link2Item) {
-              //   stack.push([link1Item, link2Item]);
-              // } else {
-              //   await deep.insert(link1Item);
-              // }
+              await deep.insert(data);
             }
           }
         }
       }
     }
+  };
+
+  // Обрабатываем новые связи, которые есть в link2, но отсутствуют в link1
+  const processNewLinks = async (newLinks) => {
+    for (const newLink of newLinks) {
+      const existingLink = await deep.select({ id: newLink.id });
+      if (!existingLink) {
+        const data = {
+          from_id: newLink.from_id,
+          type_id: newLink.type_id,
+          to_id: newLink.to_id,
+        };
+
+        if (newLink.value) {
+          data.string = { data: { value: newLink.value.value } }
+        }
+
+        await deep.insert(data);
+      } else {
+        await deep.update(
+          { link_id: newLink._id },
+          { from_id: newLink.from_id },
+          { type_id: newLink.type_id },
+          { to_id: newLink.to_id },
+          { value: newLink.value?.value },
+          { table: (typeof newLink.value?.value) + 's' }
+        );
+      }
+    }
+  };
+
+  // Обрабатываем удаление связей, которые есть в link1, но отсутствуют в link2
+  const processRemoval = async (link1, link2) => {
+    for (const link of link1) {
+      if (!link2.find((result) => result.id === link.id)) {
+        await deep.delete({ id: link.id });
+      }
+    }
+  };
+
+  // 1. Начинаем с обработки корневого уровня. Проходим по каждому объекту в folderRequestResult.
+  for (const existingLink of folderRequestResult) {
+    const relationPathDataLink = relationPathData.results.find((result) => result.id === existingLink.id);
+    if (relationPathDataLink) {
+      // Если нашли совпадающий объект в relationPathData, обрабатываем их сравнением.
+      await processLinks(existingLink, relationPathDataLink);
+    } else {
+      // Если объект отсутствует в relationPathData, добавляем его в базу.
+      await processNewLinks([existingLink]);
+    }
   }
- 
-  // 5. Сравниваем названия связей.
+
+  // 2. Дополнительно обрабатываем удаление связей, которые есть в relationPathData, но отсутствуют в folderRequestResult.
+  const linksToRemove = relationPathData.results.filter((result) => !folderRequestResult.find((link) => link.id === result.id));
+  await processRemoval(linksToRemove, relationPathData.results);
+
+  // 3. Сравниваем и обновляем названия связей, если это необходимо.
   for (const id in relationPathData.listNameLink) {
     if (relationPathData.listNameLink[id]) {
       const linkName = await getLinkName(id);
@@ -564,12 +555,12 @@ const checResultsWithCurrent = async (folderRequestResult, relationPathData) => 
         await deep.update(
           { link_id: id },
           { value: relationPathData.listNameLink[id] },
-          { table: (typeof relationPathData.listNameLinkid) + 's' }
+          { table: 'strings' }
         );
       }
     }
   }
- };
+};
  
 
 
