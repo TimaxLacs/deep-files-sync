@@ -181,16 +181,17 @@ const renameFolder = async (filedir, link) => {
 }
 
 
-const saveSubscriptionData = async (data, currentDir) => {
-  const subFileName = `sub${subscriptionCount}.js`; // Уникальное имя файла
+// Функция для сохранения данных подписки в файл
+const saveSubscriptionData = async (data, currentDir, type) => {
+  const subFileName = `sub${type}${subscriptionCount}.json`; // Уникальное имя файла
   const subFilePath = path.join(currentDir, subFileName);
   try {
-      await createFile(subFilePath, data);
+      fs.writeFileSync(subFilePath, JSON.stringify(data, null, 2));
       console.log(`Сохранено значение подписки в файл ${subFileName}`);
       subscriptionCount++; // Увеличиваем счетчик для следующего файла
       return {
           filePath: subFilePath,
-          folderName: subFileName.replace('.js', '') // Возвращаем имя папки без формата
+          folderName: subFileName.replace('.json', '') // Возвращаем имя папки без формата
       };
   } catch (error) {
       console.error(`Ошибка сохранения данных подписки: ${error}`);
@@ -380,14 +381,11 @@ const executeEvalFile = async (evalPath, currentDir) => {
               if (parsedData.mode === 'req') {
                 await handleRequest(parsedData, currentDir)
               } 
-              // else if (parsedData.mode === 'sub') {
+              else if (parsedData.mode === 'sub') {
+                await handleSubscriptionOut(parsedData, currentDir);
+                
 
-              //   setInterval(() => {
-              //     handleRequest(parsedData, currentDir)
-              //     console.log('Отправка данных по подписке...');
-              // }, 3000);
-
-              // }
+              }
               else {
                   console.error('Неизвестный режим:', parsedData.mode);
               }
@@ -1141,7 +1139,7 @@ const commandStraightSync = async (commandResults, straightPathData) => {
 const processResult = async (resultData, data, currentDir) => {
   // Если это подписка, используем полученный resultData
   if (resultData && typeof resultData.subscribe === 'function') {
-      const subscriptionResult = await handleSubscription(resultData, currentDir, data);
+      const subscriptionResult = await handleSubscriptionIn(resultData, currentDir, data);
       return
   }
 
@@ -1187,8 +1185,8 @@ const selectSimple = async (resultData, currentDir, subName = null) => {
 
 
 
-const handleSubscription = async (subscription, currentDir, data) => {
-    const subscriptionData = await saveSubscriptionData(data, currentDir);
+const handleSubscriptionIn = async (subscription, currentDir, data) => {
+    const subscriptionData = await saveSubscriptionData(data, currentDir, 'In');
     
     if (subscriptionData.filePath) {
         const subscriptionHandler = subscription.subscribe({
@@ -1282,10 +1280,45 @@ const subClean = async (currentDir, linkList, subName) => {
 };
 
 
+// Функция для обработки подписки на основе файла
+const handleSubscriptionOut = async (data, currentDir) => {
+  const subscriptionData = await saveSubscriptionData(data, currentDir, 'Out');
+  if (subscriptionData.filePath) {
+      const monitoredPaths = data.relationPath.concat(data.straightPath);
+
+      // Создаем массив для хранения наблюдателей
+      const watchers = monitoredPaths.map((monitoredPath) => {
+          const fullPath = path.resolve(currentDir, monitoredPath);
+          return fs.watch(fullPath, async (eventType, filename) => {
+              if (filename) {
+                  console.log(`Изменение обнаружено в: ${fullPath}`);
+                  await handleRequest(data, currentDir, fullPath);
+              }
+          });
+      });
+
+      // Сохраняем подписку и ее наблюдателей в активные подписки
+      activeSubscriptions[subscriptionData.filePath] = {
+          watchers: watchers,
+          filePath: subscriptionData.filePath
+      };
+
+      // Для обработки отмены подписки
+      fs.watchFile(subscriptionData.filePath, (curr, prev) => {
+          if (!fs.existsSync(subscriptionData.filePath)) {
+              console.log('Файл подписки удален. Отписываемся...');
+              activeSubscriptions[subscriptionData.filePath].watchers.forEach(watcher => watcher.close());
+              fs.unwatchFile(subscriptionData.filePath);
+              delete activeSubscriptions[subscriptionData.filePath];
+          }
+      });
+  } else {
+      console.error('Ошибка сохранения данных подписки');
+  }
+};
 
 
 
-// Настройка наблюдателя за появлением и удалением файлов
 watch.watchTree(dirPath, async (f, curr, prev) => {
   if (typeof f === 'object' && prev === null && curr === null) {
     return;
@@ -1330,7 +1363,7 @@ watch.watchTree(dirPath, async (f, curr, prev) => {
 
           // Предполагается, что в data.json есть объект с полем value
           if (data.value !== undefined || data.value !== null) {
-            data.value.value = newValue; // Заменяем значение
+            data.value = newValue; // Заменяем значение
             fs.writeFileSync(dataPath, JSON.stringify(data, null, 2)); // Записываем обратно в data.json
             console.log(`Значение в data.json обновлено на: ${newValue} в директории ${currentDir}`);
           }
@@ -1341,18 +1374,18 @@ watch.watchTree(dirPath, async (f, curr, prev) => {
         console.error(`Ошибка обработки value.txt в ${currentDir}: ${error}`);
       }
     }
+
+    // Проверка изменений в структуре папок
+    await updateJsonBasedOnFolderChanges(currentDir);
   }
 });
 
-
-
-
 // Функция для чтения файла
-const fileread = (currentDir) => {
+const fileread = (filePath) => {
   return new Promise((resolve, reject) => {
-    fs.readFile(currentDir, 'utf8', (err, data) => {
+    fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) {
-        console.error('Ошибка чтения:',currentDir, err);
+        console.error('Ошибка чтения:', filePath, err);
         reject(err);
         return;
       }
@@ -1361,24 +1394,53 @@ const fileread = (currentDir) => {
   });
 };
 
-async function updateDataFile(dataFilePath, newDir) {
+// Функция для обновления data.json на основе изменений в других файлах или папках
+const updateJsonBasedOnFolderChanges = async (currentDir) => {
   try {
-    const data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    const dataPath = path.join(currentDir, 'data.json');
+    if (fs.existsSync(dataPath)) {
+      const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 
-    // Разбиваем имя папки на части
-    const parts = newDir.split('__');
+      // Проверка внешних директорий для in, out, typed
+      const externalDirs = ['in', 'out', 'typed'];
+      const parentDir = path.dirname(currentDir);
+      externalDirs.forEach(dir => {
+        const dirPath = path.join(parentDir, dir);
+        if (fs.existsSync(dirPath)) {
+          const parentDirName = path.basename(parentDir);
+          data[dir] = parentDirName;
+          console.log(`Значение ${dir} в data.json обновлено на: ${parentDirName} в директории ${currentDir}`);
+        }
+      });
 
-    // Извлекаем первый и последний элементы
-    const id = parseInt(parts[0], 10);
-    const typeId = parseInt(parts[parts.length - 1], 10);
+      // Проверка внутренних директорий для from, to, type
+      const internalDirs = ['from', 'to', 'type'];
+      internalDirs.forEach(dir => {
+        const dirPath = path.join(currentDir, dir);
+        if (fs.existsSync(dirPath)) {
+          const parentDirName = path.basename(currentDir);
+          data[dir] = parentDirName;
+          console.log(`Значение ${dir} в data.json обновлено на: ${parentDirName} в директории ${currentDir}`);
+        }
+      });
 
-    // Обновляем данные в файле
-    data.id = id;
-    data.type_id = typeId;
-
-    // Записываем обновленные данные в файл
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf8');
+      // Записываем изменения обратно в data.json
+      fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+    } else {
+      console.log(`data.json не найден в директории ${currentDir}`);
+    }
   } catch (error) {
-    throw error;
+    console.error(`Ошибка обновления data.json на основе изменений в папках: ${error}`);
   }
-}
+};
+
+// Запуск наблюдателя
+watch.watchTree(dirPath, async (f, curr, prev) => {
+  if (typeof f === 'object' && prev === null && curr === null) {
+    return;
+  } else {
+    const currentDir = path.dirname(f);
+    await updateJsonBasedOnFolderChanges(currentDir);
+  }
+});
+
