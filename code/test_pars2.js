@@ -442,7 +442,7 @@ const handleRequest = async (parsedData, currentDir) => {
 
     // прямой запрос
     if (parsedData.straightPath && parsedData.straightPath.length > 0) {
-      straightPathData = await processPath(parsedData.straightPath, currentDir);
+      straightPathData = await processPath(parsedData.straightPath, currentDir, 'straight', parsedData.command);
 
       if (commandResults) await commandStraightSync(commandResults, straightPathData);
       else await noCommandStraightSync(straightPathData, currentDir);
@@ -450,7 +450,7 @@ const handleRequest = async (parsedData, currentDir) => {
 
     // релейшн запрос
     if (parsedData.relationPath && parsedData.relationPath.length > 0) {
-      relationPathData = await processPath(parsedData.relationPath, currentDir, parsedData.command);
+      relationPathData = await processPath(parsedData.relationPath, currentDir, 'relation', parsedData.command);
       let  commandRequestResult;
       if (commandResults) {
         await checResultsWithCurrent(commandResults, relationPathData);
@@ -587,7 +587,6 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
       }
     }
   }
-  
   };
   
   
@@ -645,7 +644,7 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
           data = {...data};
           if(data.data) data = data.data[0];
 
-  
+          console.log(mode, 'mode')
           if(mode == 'straight'){
   
             // удаляем, если пользователь указан на это
@@ -708,6 +707,9 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
             const pathToObjResult = await pathToObjResultAndSelect(absoluteCleanPath, data);
             queries.push(...pathToObjResult.queries);
             results.push(...pathToObjResult.result);
+            console.log(pathToObjResult, 'pathToObjResult')
+            console.log(results, 'results')
+            console.log(queries, 'queries')
           }
           console.log('Обработаны данные связи из папки:', data);
         } 
