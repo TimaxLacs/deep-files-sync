@@ -2,7 +2,7 @@ import pkg from '@apollo/client/core/core.cjs';
 const { ApolloClient, InMemoryCache, split, HttpLink } = pkg;
 import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
 import { WebSocketLink } from '@apollo/client/link/ws/ws.cjs';
-import { getMainDefinition } from '@apollo/client/utilities/utilities.cjs';
+import { Concast, getMainDefinition } from '@apollo/client/utilities/utilities.cjs';
 import { SubscriptionClient } from 'subscriptions-transport-ws';
 import ws from 'ws';
 import fs from 'fs';
@@ -245,6 +245,16 @@ const executeAsync = async (code) => {
 };
 
 
+const executeAsync1 = async (func) => {
+  try {
+      return await func(); 
+  } catch (err) {
+      console.error(`Ошибка при выполнении команды: ${err}`);
+      throw err; 
+  }
+};
+
+
 
 const selectRelation = async (arrayLink, baseDir, subName = null) => {
     const idInFolder = await getIdFromFolderName(baseDir);
@@ -466,7 +476,9 @@ const handleRequest = async (parsedData, currentDir) => {
           console.log(folderRequest)
           console.log(`${folderRequest}`)
           console.log(`${folderRequest}`, '========')
-          commandRequestResult = await executeAsync(`deep.select(${folderRequest})`);
+          commandRequestResult = await executeAsync1(() => deep.select(folderRequest));
+          console.log(commandRequestResult)
+          console.log('commandRequestResult')
           await checResultsWithCurrent(commandRequestResult, relationPathData);
         }
       }
@@ -483,8 +495,8 @@ const handleRequest = async (parsedData, currentDir) => {
 
 const checResultsWithCurrent = async (commandRequestResult, relationPathData) => {
 
-  console.log(commandRequestResult, 'commandRequestResult')
-  console.log(relationPathData, 'relationPathData')
+  console.log(commandRequestResult.data, 'commandRequestResult.data')
+  console.log(relationPathData.results, 'relationPathData.results')
 
   // Итеративная обработка связей
   const processLinksIteratively = async (linkReq, linkFolder) => {
@@ -537,53 +549,71 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
   // Обработка новых связей
   const processNewLinks = async (newLinks) => {
     for (const newLink of newLinks) {
-      const existingLink = await deep.select({ id: newLink.id });
-      if (!existingLink.data.length) {
-        const data = {
-          from_id: newLink.from_id,
-          type_id: newLink.type_id,
-          to_id: newLink.to_id,
-        };
-        if (newLink.value) {
-          data.string = { data: { value: newLink.value.value } };
-        }
-        await deep.insert(data);
-      } else {
-        await deep.update(
-          { link_id: newLink._id },
-          { from_id: newLink.from_id },
-          { type_id: newLink.type_id },
-          { to_id: newLink.to_id },
-          { value: newLink.value?.value },
-          { table: (typeof newLink.value?.value) + 's' }
-          );
-        }
-      }
-    };
-  
-    // Обработка удаления связей
-    const processRemoval = async (linksToRemove) => {
-      for (const link of linksToRemove) {
-        await deep.delete({ id: link.id });
-      }
-    };
+        console.log(newLink, 'newLink');
 
+        // Проверка наличия связи в БД
+        const existingLink = await deep.select({ id: newLink.id });
+        console.log(existingLink.data.length, 'existingLink.data.length');
+
+        if (!existingLink.data.length) {
+            // Если связь не найдена, создаем новую запись
+            const data = {
+                from_id: newLink.from_id,
+                type_id: newLink.type_id,
+                to_id: newLink.to_id,
+            };
+            if (newLink.value) {
+                data.string = { data: { value: newLink.value.value } };
+            }
+            console.log(data, 'datadata');
+            await deep.insert(data);
+        } else {
+            // Если связь найдена, обновляем её, если это необходимо
+            await deep.update(
+                { link_id: newLink.id },
+                { from_id: newLink.from_id },
+                { type_id: newLink.type_id },
+                { to_id: newLink.to_id },
+                { value: newLink.value?.value },
+                { table: (typeof newLink.value?.value) + 's' }
+            );
+        }
+
+        // Рекурсивная проверка и обработка вложенных объектов
+        for (const key of Object.keys(newLink)) {
+            if (typeof newLink[key] === 'object' && newLink[key] !== null && key !== '__typename') {
+                await processNewLinks([newLink[key]]);
+            }
+        }
+    }
+  };
+
+  // Обработка удаления связей
+  const processRemoval = async (linksToRemove) => {
+    for (const link of linksToRemove) {
+      await deep.delete({ id: link.id });
+    }
+  };
 
 
 
 
     // 1. Обработка на корневом уровне, используя итеративный подход
-  for (const existingLink of commandRequestResult) {
-    const folderRelationResults = relationPathData.results.find((result) => result.id === existingLink.id);
+
+  console.log(commandRequestResult.data, 'commandRequestResult.data')
+  for (const existingLink of relationPathData.results) {
+    const folderRelationResults = commandRequestResult.data.find((result) => result.id === existingLink.id);
     if (folderRelationResults) {
+      console.log('обновление связи', existingLink)
       await processLinksIteratively(existingLink, folderRelationResults);
     } else {
+      console.log('добавление связи', existingLink)
       await processNewLinks([existingLink]);
     }
   }
 
   // 2. Обработка удаления связей
-  const linksToRemove = relationPathData.results.filter((result) => !commandRequestResult.find((link) => link.id === result.id));
+  const linksToRemove = relationPathData.results.filter((result) => !commandRequestResult.data.find((link) => link.id === result.id));
   await processRemoval(linksToRemove);
 
   // 3. Сравнение и обновление названий связей
@@ -770,10 +800,10 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
             else if(mode == 'relation'){
               const pathParts = absoluteCleanPath.split(path.sep);
               for (let i = pathParts.length - 1; i >= 0; i--) {
-                const currentDir = pathParts.slice(0, i + 1).join(path.sep);
-                if (fs.existsSync(path.join(currentDir, 'data.json'))) {
-                  const dataFilePath = path.join(currentDir, 'data.json');
-                  const folderName = path.basename(currentDir);
+                const dir = pathParts.slice(0, i + 1).join(path.sep);
+                if (fs.existsSync(path.join(dir, 'data.json'))) {
+                  const dataFilePath = path.join(dir, 'data.json');
+                  const folderName = path.basename(dir);
                   data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
                   data = {...data};
                   if(data.data) data = data.data[0]
@@ -800,9 +830,12 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
   
               // обновляем данные
               pathResults.push({ id: data.id, path: linkDir }); 
-              const pathToObjResult = await pathToObjResultAndSelect(linkDir, data, commandRelation);
+
+              
+              const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), path.relative(currentDir, linkDir), data, commandRelation);
               queries.push(...pathToObjResult.queries);
-              results.push(...pathToObjResult.result);
+              results.push(...[pathToObjResult.result]);
+
             }
             console.log('Обработаны данные связи из папки:', data);
           }
@@ -836,9 +869,9 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
                
               // обновляем данные
               const data = {...linkResults.results};
-              const pathToObjResult = await pathToObjResultAndSelect(linkDir, data, commandRelation);
+              const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), path.relative(currentDir, linkDir), data, commandRelation);
               queries.push(...pathToObjResult.queries);
-              results.push(...pathToObjResult.result);
+              results.push(...[pathToObjResult.result]);
               pathResults.push(...linkResults.pathResults); // Делаем "распаковку"массива
               Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
             }
