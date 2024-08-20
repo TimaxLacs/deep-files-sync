@@ -442,7 +442,7 @@ const handleRequest = async (parsedData, currentDir) => {
 
     // прямой запрос
     if (parsedData.straightPath && parsedData.straightPath.length > 0) {
-      straightPathData = await processPath(parsedData.straightPath, currentDir, 'straight', parsedData.command);
+      straightPathData = await processPath(parsedData.straightPath, currentDir, 'straight', commandResults);
 
       if (commandResults) await commandStraightSync(commandResults, straightPathData);
       else await noCommandStraightSync(straightPathData, currentDir);
@@ -450,14 +450,15 @@ const handleRequest = async (parsedData, currentDir) => {
 
     // релейшн запрос
     if (parsedData.relationPath && parsedData.relationPath.length > 0) {
-      relationPathData = await processPath(parsedData.relationPath, currentDir, 'relation', parsedData.command);
+      relationPathData = await processPath(parsedData.relationPath, currentDir, 'relation', commandResults);
       let  commandRequestResult;
       if (commandResults) {
         await checResultsWithCurrent(commandResults, relationPathData);
       }
       else {
+        //commandResults = await executeAsync(`deep.select(${relationPathData.queries})`);
         for(const folderRequest of relationPathData.queries){
-          commandRequestResult = await executeAsync(folderRequest);
+          commandRequestResult = await executeAsync(`deep.select(${folderRequest})`);
           await checResultsWithCurrent(commandRequestResult, relationPathData);
         }
       }
@@ -593,7 +594,7 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
 
 
 
-  const processPath = async (straightPath, currentDir, mode, commandRelation) => {
+  const processPath = async (straightPath, currentDir, mode, commandRelation=[]) => {
     console.log('Обработка straightPath:', straightPath);
   
     let results = [];
@@ -623,6 +624,8 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
           const lastDirectory = path.basename(path.dirname(absoluteCleanPath));
           const firstValue = lastDirectory.split('__')[0];
           const parentDirectory = path.dirname(path.dirname(absoluteCleanPath));
+          const parentDirectory1 = path.dirname(path.dirname(cleanPath));
+          cleanPath = fs.readdirSync(parentDirectory1).find(folder => folder.startsWith(`${firstValue}__`));  
           absoluteCleanPath = fs.readdirSync(parentDirectory).find(folder => folder.startsWith(`${firstValue}__`));  
   
           if (!fs.existsSync(absoluteCleanPath)) {
@@ -669,20 +672,21 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
             results.push(data);
           }
           else if(mode == 'relation'){
-            const pathParts = absoluteCleanPath.split(path.sep);
+            cleanPath = path.join(path.basename(currentDir), cleanPath);
+            const pathParts = cleanPath.split(path.sep);
             for (let i = pathParts.length - 1; i >= 0; i--) {
-              const currentDir = pathParts.slice(0, i + 1).join(path.sep);
-              if (fs.existsSync(path.join(currentDir, 'data.json'))) {
-                const dataFilePath = path.join(currentDir, 'data.json');
-                const folderName = path.basename(currentDir);
+              const currentDir1 = pathParts.slice(0, i + 1).join(path.sep);
+              if (fs.existsSync(path.join(currentDir1, 'data.json'))) {
+                const dataFilePath = path.join(currentDir1, 'data.json');
+                const folderName = path.basename(currentDir1);
                 
-  
-                let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+                //console.log(folderName, 'folderName')
+                data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
                 data = {...data}
                 if(data.data) data = data.data[0]
-  
+                //console.log(data, 'data----')
                 // Вызов функции обновления данных на основе папок отношений
-                await updateDataJsonWithRelations(absoluteCleanPath);
+                await updateDataJsonWithRelations(cleanPath);
   
                 //  удаляем, если пользователь указал на это
                 if(userPath.startsWith("-")){
@@ -704,10 +708,15 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
   
             // обновляем данные
             pathResults.push({ id: data.id, path: absoluteCleanPath });
-            const pathToObjResult = await pathToObjResultAndSelect(absoluteCleanPath, data);
+            //console.log(cleanPath, 'cleanPath00000')
+            //console.log(data, 'data00000')
+            console.log(currentDir, 'currentDir00000')
+            console.log(path.dirname(currentDir), 'path.dirname(currentDir)00000')
+            //console.log(commandRelation, 'commandRelation00000')
+            const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
+            console.log(pathToObjResult, 'pathToObjResult')
             queries.push(...pathToObjResult.queries);
             results.push(...pathToObjResult.result);
-            console.log(pathToObjResult, 'pathToObjResult')
             console.log(results, 'results')
             console.log(queries, 'queries')
           }
@@ -756,7 +765,7 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
                 if (fs.existsSync(path.join(currentDir, 'data.json'))) {
                   const dataFilePath = path.join(currentDir, 'data.json');
                   const folderName = path.basename(currentDir);
-                  let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+                  data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
                   data = {...data};
                   if(data.data) data = data.data[0]
  
@@ -781,8 +790,8 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
               }
   
               // обновляем данные
-              pathResults.push({ id: data.id, path: linkDir });
-              const pathToObjResult = await pathToObjResultAndSelect(linkDir, data);
+              pathResults.push({ id: data.id, path: linkDir }); 
+              const pathToObjResult = await pathToObjResultAndSelect(linkDir, data, commandRelation);
               queries.push(...pathToObjResult.queries);
               results.push(...pathToObjResult.result);
             }
@@ -818,7 +827,7 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
                
               // обновляем данные
               const data = {...linkResults.results};
-              const pathToObjResult = await pathToObjResultAndSelect(linkDir, data);
+              const pathToObjResult = await pathToObjResultAndSelect(linkDir, data, commandRelation);
               queries.push(...pathToObjResult.queries);
               results.push(...pathToObjResult.result);
               pathResults.push(...linkResults.pathResults); // Делаем "распаковку"массива
@@ -838,106 +847,84 @@ const checResultsWithCurrent = async (commandRequestResult, relationPathData) =>
   
 
 
-const pathToObjResultAndSelect = async (folderPath, data, relations = {}) => {
+  const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, relations = []) => {
 
-  if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
-    console.error('Invalid current directory');
-    return { result: data, queries: [] };
-  }
+    // const allPath = path.join(currentPath, relationFolderPath);
+    // if (!fs.existsSync(allPath) || !fs.statSync(allPath).isDirectory()) {
+    //     console.error('Invalid current directory');
+    //     return { result: [], queries: [] };
+    // }
+    console.log(currentPath, 'currentPath11111')
+    // console.log(path.basename(currentPath), 'path.basename(currentPath)11111')
+    //relationFolderPath = path.join(path.basename(currentPath), relationFolderPath) 
+    const segments = relationFolderPath.split(path.sep);
+    let currentObject = data; // Изначально переданный объект
+    let foundData = false;
+    let relationsPath = relations;
+    let queries = [];
 
-  const segments = folderPath.split(path.sep);
-  let currentObject = data;
-  let foundData = false;
-  let relationsPath = relations;
-  let query = {};
-  let queries = [];
+    for (let i = 0; i < segments.length; i++) {
+        let pathSoFar = '';
+        for (let j = 0; j <= i; j++) {
+          if (fs.existsSync(path.join(path.join(currentPath, pathSoFar), 'data.json'))) {
+            console.log(path.join(path.join(currentPath, pathSoFar), 'data.json'), 'path.join(path.join(currentPath, pathSoFar), )11111')
+            continue;
+          }
+          pathSoFar = path.join(pathSoFar, segments[j]);
+        }
+        pathSoFar = path.join(currentPath, pathSoFar);
+        console.log(pathSoFar, 'pathSoFar11111')
+        if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
+            const dataFilePath = path.join(pathSoFar, 'data.json');
+            if (fs.existsSync(dataFilePath)) {
+                const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
 
-  for (let i = 0; i < segments.length; i++) {
-    let pathSoFar = '';
-    for (let j = 0; j <= i; j++) {
-      pathSoFar = path.join(pathSoFar, segments[j]);
+                let relationName = segments[i] + 'Text';
+                for (const key in relationsPath) {
+                    if (relationsPath[key].relation === segments[i]) {
+                        relationName = key;
+                        relationsPath = relationsPath[key].return;
+                        break;
+                    }
+                }
+                console.log(relationName, 'relationName11111')
+                if (!currentObject.hasOwnProperty(relationName)) {
+                    currentObject[relationName] = newData;
+                } else {
+                    Object.assign(currentObject[relationName], newData);
+                }
+
+                currentObject = currentObject[relationName]; // Обновляем текущий объект
+                console.log(currentObject, 'currentObject11111')
+                if (!relations) {
+                    if (foundData) {
+                        let returnObj = queries[queries.length - 1].return;
+                        for (let k = 1; k < i; k++) {
+                            returnObj = returnObj[Object.keys(returnObj)[0]].return;
+                        }
+                        let relationName = segments[i] + 'Text';
+                        returnObj[relationName] = { relation: segments[i], return: {} };
+                    } else {
+                        foundData = true;
+                        let query = {
+                            id: newData.id,
+                            return: {}
+                        };
+                        let relationName = segments[i] + 'Text';
+                        query.return[relationName] = { relation: segments[i], return: {} };
+                        queries.push(query);
+                    }
+                }
+                console.log(data, 'data11111')
+                console.log(queries, 'queries')
+            }
+        }
     }
+    console.log(data, 'data999999')
+    console.log(queries, 'queries')
+    return { result: data, queries: queries };
+};
 
-    if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
-      const dataFilePath = path.join(pathSoFar, 'data.json');
-
-      if (fs.existsSync(dataFilePath)) {
-        const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-
-        let relationName = segments[i] + 'Text';
-        for (const key in relationsPath) {
-          if (relationsPath[key].relation === segments[i]) {
-            relationName = key;
-            relationsPath = relationsPath[key].return;
-            break;
-          }
-        }
-
-        if (!currentObject.some(obj => obj.hasOwnProperty(relationName))) {
-          currentObject.push({ [relationName]: newData });
-        } else {
-          const existingObject = currentObject.find(obj => obj.hasOwnProperty(relationName));
-          Object.assign(existingObject[relationName], newData);
-        }
-
-        currentObject = currentObject.find(obj => obj.hasOwnProperty(relationName))[relationName];
-
-        if (!relations) {
-          if (foundData) {
-            let returnObj = query.return;
-            for (let k = 1; k < i; k++) {
-              returnObj = returnObj[Object.keys(returnObj)[0]].return;
-            }
-            let relationName = segments[i] + 'Text';
-            returnObj[relationName] = { relation: segments[i], return: {} };
-          } else {
-            foundData = true;
-            query.id = newData.id;
-            query.return = {};
-            let relationName = segments[i] + 'Text';
-            query.return[relationName] = { relation: segments[i], return: {} };
-          }
-        }
-
-      } else {
-        if (!foundData) { // Пропускаем каталог, если не нашли data.json
-          continue; 
-        } else {
-          let relationName = segments[i] + 'Text';
-          for (const key in relationsPath) {
-            if (relationsPath[key].relation === segments[i]) {
-              relationName = key;
-              relationsPath = relationsPath[key].return;
-              break;
-            }
-          }
-
-          if (!currentObject.some(obj => obj.hasOwnProperty(relationName))) {
-            currentObject.push({ [relationName]: [] });
-          }
-
-          currentObject = currentObject.find(obj => obj.hasOwnProperty(relationName))[relationName];
-
-          if (!relations) {
-            let returnObj = query.return;
-            for (let k = 1; k < i; k++) {
-              returnObj = returnObj[Object.keys(returnObj)[0]].return;
-            }
-            returnObj[relationName] = { relation: segments[i], return: {} };
-          }
-        }
-      }
-    }
-  }
-
-  // Сохраняем запрос в список запросов
-  if (!relations && !queries.some(q => JSON.stringify(q) === JSON.stringify(query))) {
-    queries.push(query);
-  }
-
-  if (!foundData) currentObject = [];
-  return { result: data, queries: queries };
-}
 
 
 
