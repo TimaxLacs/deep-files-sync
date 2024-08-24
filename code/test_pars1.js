@@ -538,6 +538,8 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
           updatedPaths.push({ path1: linkPath.path, value: newValue }); // Добавляем в массив обновляемых путей
       }
   };
+
+
   const processPendingLinks = async (linkList) => {
     for (let j = linkList.length - 1; j >= 0; j--) {
         const pendingLink = linkList[j];
@@ -571,7 +573,8 @@ const processNewLinks = async (newLinks) => {
             if (newLink.value) {
                 data.string = { data: { value: newLink.value.value } };
             }
-            await deep.insert(data);
+            const insert = await deep.insert(data);
+            await updateOldLinks(newLinks, newLink.id, insert.data[0].id);
             console.log('Создана новая связь:', JSON.stringify(data));
         } else {
             // Обновление для всех ключей
@@ -595,8 +598,15 @@ const processNewLinks = async (newLinks) => {
         const linkPath = relationPathData.path.find(pathResult => pathResult.id === newLink.id);
         if (linkPath) {
           const newValue = Object.assign({}, newLink); // Клонируем объект
-          updatedPaths.push({ path1: linkPath.path, value: newValue });
-      }
+
+
+          // Проверка на наличие в updatedPaths по id для предотвращения дублирования
+          const existingPath = updatedPaths.find(item => item.value.id === newValue.id);
+          if (existingPath) existingPath.value = newValue; // Обновляем существующее значение
+          else updatedPaths.push({ path1: linkPath.path, value: newValue }); // Добавляем новое значение
+          
+          //updatedPaths.push({ path1: linkPath.path, value: newValue });
+          }
 
       // Проходим по всем вложенным объектам
       for (const key of Object.keys(newLink)) {
@@ -607,6 +617,61 @@ const processNewLinks = async (newLinks) => {
       }
   }
 };
+
+
+// Функция для обновления файлов на основе собранных данных
+const updateFilePaths = async () => {
+  // Сортировка по длине пути для корректного обновления
+  console.log(updatedPaths, 'updatedPaths')
+  updatedPaths.sort((a, b) => b.path1.length - a.path1.length);
+  for (const { path1, value } of updatedPaths) {
+      const dataPath = path.join(path1, 'data.json');
+      await replaceFile(dataPath, value.id);
+      await renameFolder(path1, value.id);
+      console.log('Обновлены данные в папке:', path1);
+  }
+};
+
+// Функция для обновления старых ID на новые (обработает как объект, так и массив)
+const updateOldLinks = async(links, oldId, newId) => {
+  // Обработка массива или одиночного объекта
+  const linksArray = Array.isArray(links) ? links : [links];
+  
+  const stack = [...linksArray]; // Используем стек для обхода без рекурсии
+
+  while (stack.length > 0) {
+      const link = stack.pop();
+
+      // Обновляем ссылки в данной связи
+      if (link.from_id === oldId) {
+          link.from_id = newId;
+      }
+      if (link.to_id === oldId) {
+          link.to_id = newId;
+      }
+      if (link.type_id === oldId) {
+        link.type_id = newId;
+      }
+      if (link.id === oldId) {
+        link.id = newId;
+      }
+
+      for(let pathAndId in relationPathData.path){
+        if(relationPathData.path[pathAndId].id == oldId) relationPathData.path[pathAndId].id = newId
+      }
+
+      // Добавляем вложенные объекты или массивы в стек
+      for (const key in link) {
+          if (Array.isArray(link[key])) {
+              stack.push(...link[key]); // Добавляем все элементы массивов
+          } else if (typeof link[key] === 'object' && link[key] !== null) {
+              stack.push(link[key]); // Добавляем вложенные объекты
+          }
+      }
+  }
+};
+
+
 
 
 // 1. Обработка на корневом уровне, используя итеративный подход
@@ -624,8 +689,6 @@ const stack1 = [{ linksReq, linksFolder: relationPathData.results }];
 
 while (stack1.length > 0) {
     const { linksReq, linksFolder } = stack1.pop();
-    console.log(linksFolder, 'linksFolder');
-    console.log(linksReq, 'linksReq');
 
     const numCycle = Math.max(linksReq.length, linksFolder.length);
     for (let i = 0; i < numCycle; i++) {
@@ -643,6 +706,9 @@ while (stack1.length > 0) {
             continue;
         }
 
+
+        console.log(JSON.stringify(linkReq), 'JSON.stringify(linkReq)+++++++++++++++++')
+        console.log(JSON.stringify(linkFolder), 'JSON.stringify(linkFolder)+++++++++++++++++')
         if (JSON.stringify(linkReq) === JSON.stringify(linkFolder)) continue; // Проверка на абсолютное совпадение
 
         const relationPath = relationPathData.queries[i];
@@ -692,20 +758,6 @@ while (stack1.length > 0) {
 }
 
 // Обновление файлов после всех вставок и обновлений
-
-// Функция для обновления файлов на основе собранных данных
-const updateFilePaths = async () => {
-  // Сортировка по длине пути для корректного обновления
-  console.log(updatedPaths, 'updatedPaths')
-  updatedPaths.sort((a, b) => b.path1.length - a.path1.length);
-  for (const { path1, value } of updatedPaths) {
-      const dataPath = path.join(path1, 'data.json');
-      await replaceFile(dataPath, value.id);
-      await renameFolder(path1, value.id);
-      console.log('Обновлены данные в папке:', path1);
-  }
-};
-
 await updateFilePaths();
 
 
