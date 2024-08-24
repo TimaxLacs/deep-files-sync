@@ -139,6 +139,7 @@ const createDataFile = async (link, directoryPath) => {
 
 
 const replaceFile = async (filedir, link) => {
+  console.log(filedir, link, 'filedir, link')
   try {
     if (typeof link !== 'object') {
         link = await deep.select({id: link});
@@ -146,7 +147,9 @@ const replaceFile = async (filedir, link) => {
         link = await deep.select({id: link.id});
     }
 
+    console.log(link, 'link')
     const fileContentString = JSON.stringify(link.data[0]);
+    console.log(fileContentString, 'fileContentString')
     await fs.promises.writeFile(filedir, fileContentString);
     console.log('Файл успешно обновлен на:', fileContentString);
   } catch (err) {
@@ -157,13 +160,10 @@ const replaceFile = async (filedir, link) => {
 
 
 const renameFolder = async (filedir, link) => {
-  console.log(link, 'linkFolder111111111111111111111111111')
   try {
     if(typeof link != 'object') link = await deep.select({id: link})
     else link = await deep.select({id: link.id})
-    console.log(link, 'linkFolder222')
     const name = await getLinkName(link.data[0].id)
-    console.log(`название в ${name}`);
     let newFolderName = name
       ? `${link.data[0].id}__${name}__${link.data[0].type_id}`
       : `${link.data[0].id}__${link.data[0].type_id}`;
@@ -487,18 +487,19 @@ const handleRequest = async (parsedData, currentDir) => {
 
 
 
-
 const checResultsWithCurrent = async (commandInstructions, relationPathData) => {
   const updatedPaths = []; // Массив для хранения путей и изменений
 
   // Итеративная обработка связей
-  const processLinksIteratively = async (linkReq, linkFolder, relationPath) => {
+  const processLinksIteratively = async (linkReq, linkFolder) => {
       console.log('Обновление связи', linkReq.id);
       const stack = [{ linkReq, linkFolder }];
 
       while (stack.length > 0) {
           const { linkReq, linkFolder } = stack.pop();
-
+          console.log(linkReq, 'linkReq11111.');
+          console.log(linkFolder, 'linkFolder11111.');
+          // Обработка ключей для обновления
           for (const key of Object.keys(linkReq)) {
               if (linkReq[key] !== linkFolder[key]) {
                   if (typeof linkReq[key] !== 'object') {
@@ -519,6 +520,9 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
                           if (matchingFolderLink) {
                               stack.push({ linkReq: linkReqValue[i], linkFolder: matchingFolderLink });
                           } else {
+                              console.log(linkFolderValue, 'linkFolderValue.');
+                              console.log(linkFolder, 'linkFolder.');
+                              console.log(linkReqValue, 'linkReqValue.');
                               console.log('Связь', linkReqValue[i].id, 'не найдена в папке.');
                           }
                       }
@@ -531,189 +535,195 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
       const linkPath = relationPathData.path.find(pathResult => pathResult.id === linkReq.id);
       if (linkPath) {
           const newValue = Object.assign({}, linkFolder); // Клонируем объект для безопасного обновления
-          updatedPaths.push({ path: linkPath.path, value: newValue }); // Добавляем в массив обновляемых путей
+          updatedPaths.push({ path1: linkPath.path, value: newValue }); // Добавляем в массив обновляемых путей
       }
   };
+  const processPendingLinks = async (linkList) => {
+    for (let j = linkList.length - 1; j >= 0; j--) {
+        const pendingLink = linkList[j];
+        const existingLink = linksReq.find(result => result.id === pendingLink.id);
 
-  // Обработка новых связей
-  const processNewLinks = async (newLinks) => {
-      const stack = [...newLinks];
+        if (existingLink) {
+            console.log('Обновляем пропущенную связь:', pendingLink.id);
+            await processLinksIteratively(existingLink, pendingLink);
+        } else {
+            console.log('Добавляем пропущенную связь:', pendingLink.id);
+            await processNewLinks([pendingLink]);
+        }
+    }
+};
 
-      while (stack.length > 0) {
-          const newLink = stack.pop();
-          console.log('Обработка новой связи:', newLink.id);
+// Обработка новых связей
+const processNewLinks = async (newLinks) => {
+    const stack = [...newLinks];
 
-          const existingLink = await deep.select({ id: newLink.id });
-          if (!existingLink.data.length) {
-              const data = {
-                  from_id: newLink.from_id,
-                  type_id: newLink.type_id,
-                  to_id: newLink.to_id
-              };
-              if (newLink.value) {
-                  data.string = { data: { value: newLink.value.value } };
-              }
-              await deep.insert(data);
-              console.log('Создана новая связь:', JSON.stringify(data));
-          } else {
-              // Обновление для всех ключей
-              await deep.update(
-                  { id: newLink.id },
-                  { from_id: newLink.from_id },
-                  { type_id: newLink.type_id },
-                  { to_id: newLink.to_id }
-              );
-              if (newLink.value) {
-                  await deep.update(
-                      { link_id: newLink.id },
-                      { value: newLink.value?.value },
-                      { table: (typeof newLink.value?.value) + 's' }
-                  );
-              }
-              console.log('Обновление существующей связи:', newLink.id);
-          }
+    while (stack.length > 0) {
+        const newLink = stack.pop();
+        console.log('Обработка новой связи:', newLink.id);
 
-          // Сохраняем путь и данные для обновления
-          const linkPath = relationPathData.path.find(pathResult => pathResult.id === newLink.id);
-          if (linkPath) {
-              newLink['id'] = insert.data[0].id; // Предполагается, что insert был объявлен ранее
-              updatedPaths.push({ path: linkPath.path, value: newLink });
-          }
-      }
-  };
-
-  // Функция для обновления файлов на основе собранных данных
-  const updateFilePaths = async () => {
-      // Сортировка по длине пути для корректного обновления
-      updatedPaths.sort((a, b) => b.path.length - a.path.length);
-      for (const { path, value } of updatedPaths) {
-          const dataPath = path.join(path, 'data.json');
-          await replaceFile(dataPath, value);
-          await renameFolder(path, value);
-          console.log('Обновлены данные в папке:', path);
-      }
-  };
-
-  // 1. Обработка на корневом уровне, используя итеративный подход
-  const linksReq = [];
-
-  for (const commandDetail of commandInstructions) {
-      const commandResult = await executeAsync1(() => deep.select(commandDetail));
-      linksReq.push(...commandResult.data);
-  }
-
-  const stack1 = [{ linksReq, linksFolder: relationPathData.results }];
-
-  while (stack1.length > 0) {
-      const { linksReq, linksFolder } = stack1.pop();
-
-      const numCycle = Math.max(linksReq.length, linksFolder.length);
-      for (let i = 0; i < numCycle; i++) {
-          const linkReq = linksReq[i];
-          const linkFolder = linksFolder[i];
-
-          // Обработка отсутствующих объектов
-          if (!linkReq && linkFolder) {
-              console.log('Добавляем пропущенные связи из папковой структуры:', linkFolder.id);
-              await processNewLinks(Array.isArray(linkFolder) ? linkFolder : [linkFolder]);
-          }
-
-          if (!linkFolder) {
-              console.log('Продолжаем, так как linkFolder отсутствует.');
-              continue;
-          }
-
-          if (JSON.stringify(linkReq) === JSON.stringify(linkFolder)) continue; // Проверка на абсолютное совпадение
-
-          const relationPath = relationPathData.queries[i];
-          let relatableLinks = []; // Для хранения пропущенных связей
-          let rootData; // Данные для корневой связи
-
-          // Ищем корневую связь
-          const relationStack = [{ link: linkFolder, path: relationPath }];
-          while (relationStack.length > 0) {
-              const { link, path } = relationStack.pop();
-
-              for (const key in link) {
-                  if (typeof link[key] === 'object' && link[key] !== null && key !== '__typename') {
-                      const isCoreRelation = ['from', 'to', 'type'].includes(path.return[key]?.relation);
-                      if (isCoreRelation) {
-                          relatableLinks.push(link); // Пропускаем не корневые связи
-                      } else {
-                          rootData = link; // сохраняем корневую связь
-                      }
-                  }
-              }
-          }
-
-          // Проверяем наличие корневой связи на уровне linksReq
-          const compareLink = linksReq.find(result => result.id === rootData.id);
-          if (compareLink) {
-              console.log('Корневая связь найдена. Обновляем...', rootData.id);
-              await processLinksIteratively(rootData, compareLink, relationPath);
-          } else {
-              console.log('Корневая связь не найдена. Добавляем...', rootData.id);
-              await processNewLinks([rootData]);
-          }
-
-
-          // Обработка пропущенных связей (с конца)
-          const processPendingLinks = async (linkList) => {
-            for (let j = linkList.length - 1; j >= 0; j--) {
-                const pendingLink = linkList[j];
-                const existingLink = linksReq.find(result => result.id === pendingLink.id);
-                
-                if (existingLink) {
-                    console.log('Обновляем пропущенную связь:', pendingLink.id);
-                    await processLinksIteratively(pendingLink, existingLink, relationPath);
-                } else {
-                    console.log('Добавляем пропущенную связь:', pendingLink.id);
-                    await processNewLinks([pendingLink]);
-                }
+        const existingLink = await deep.select({ id: newLink.id });
+        if (!existingLink.data.length) {
+            const data = {
+                from_id: newLink.from_id,
+                type_id: newLink.type_id,
+                to_id: newLink.to_id
+            };
+            if (newLink.value) {
+                data.string = { data: { value: newLink.value.value } };
             }
-        };
+            await deep.insert(data);
+            console.log('Создана новая связь:', JSON.stringify(data));
+        } else {
+            // Обновление для всех ключей
+            await deep.update(
+                { id: newLink.id },
+                { from_id: newLink.from_id },
+                { type_id: newLink.type_id },
+                { to_id: newLink.to_id }
+            );
+            if (newLink.value) {
+                await deep.update(
+                    { link_id: newLink.id },
+                    { value: newLink.value?.value },
+                    { table: (typeof newLink.value?.value) + 's' }
+                );
+            }
+            console.log('Обновление существующей связи:', newLink.id);
+        }
 
-        
-          // Обработка пропущенных связей (с конца)
-          await processPendingLinks(relatableLinks);
-
-          // Углубляемся в остальные связи
-          for (const key of Object.keys(linksReq)) {
-              if (typeof linksReq[key] === 'object' && linksReq[key] !== null &&
-                  key !== '__typename' && key !== 'value') {
-
-                  let newLinksReq = Array.isArray(linksReq[key]) ? linksReq[key] : [linksReq[key]];
-                  let newLinksFolder = Array.isArray(linksFolder[key]) ? linksFolder[key] : [linksFolder[key]];
-
-                  stack1.push({ linksReq: newLinksReq, linksFolder: newLinksFolder });
-              }
-          }
+        // Сохраняем путь и данные для обновления
+        const linkPath = relationPathData.path.find(pathResult => pathResult.id === newLink.id);
+        if (linkPath) {
+          const newValue = Object.assign({}, newLink); // Клонируем объект
+          updatedPaths.push({ path1: linkPath.path, value: newValue });
       }
-  }
 
-  // Обновление файлов после всех вставок и обновлений
-  await updateFilePaths();
-
-  // 2. Обработка удаления связей с возможностью углубления
-  // const linksToRemove = relationPathData.results.filter(result => !commandInstructions.some(cmd => cmd.id === result.id));
-  // for (const linkToRemove of linksToRemove) {
-  //     await processRemoval([linkToRemove]);
-  // }
-
-  // 3. Сравнение и обновление названий связей
-  for (const id in relationPathData.listNameLink) {
-      if (relationPathData.listNameLink[id]) {
-          const linkName = await getLinkName(id);
-          if (linkName !== relationPathData.listNameLink[id]) {
-              await deep.update(
-                  { id: id },
-                  { value: relationPathData.listNameLink[id] },
-                  { table: 'strings' }
-              );
+      // Проходим по всем вложенным объектам
+      for (const key of Object.keys(newLink)) {
+          if (typeof newLink[key] === 'object' && newLink[key] !== null && key !== '__typename') {
+              const childLinks = Array.isArray(newLink[key]) ? newLink[key] : [newLink[key]];
+              stack.push(...childLinks);  // Добавляем все вложенные связи
           }
       }
   }
 };
+
+
+// 1. Обработка на корневом уровне, используя итеративный подход
+const linksReq = [];
+
+for (const commandDetail of commandInstructions) {
+  const commandResult = await executeAsync1(() => deep.select(commandDetail));
+  linksReq.push(...commandResult.data);
+}
+
+console.log(relationPathData.results, 'relationPathData.results');
+console.log(linksReq, 'linksReq');
+
+const stack1 = [{ linksReq, linksFolder: relationPathData.results }];
+
+while (stack1.length > 0) {
+    const { linksReq, linksFolder } = stack1.pop();
+    console.log(linksFolder, 'linksFolder');
+    console.log(linksReq, 'linksReq');
+
+    const numCycle = Math.max(linksReq.length, linksFolder.length);
+    for (let i = 0; i < numCycle; i++) {
+        const linkReq = linksReq[i];
+        const linkFolder = linksFolder[i];
+
+        // Обработка отсутствующих объектов
+        if (!linkReq && linkFolder) {
+            console.log('Добавляем пропущенные связи из папковой структуры:', linkFolder.id);
+            await processNewLinks(Array.isArray(linkFolder) ? linkFolder : [linkFolder]);
+        }
+
+        if (!linkFolder) {
+            console.log('Продолжаем, так как linkFolder отсутствует.');
+            continue;
+        }
+
+        if (JSON.stringify(linkReq) === JSON.stringify(linkFolder)) continue; // Проверка на абсолютное совпадение
+
+        const relationPath = relationPathData.queries[i];
+        let relatableLinks = []; // Для хранения пропущенных связей
+        let rootData; // Данные для корневой связи
+
+        // Ищем корневую связь
+        const relationStack = [{ link: linkFolder, path: relationPath }];
+        while (relationStack.length > 0) {
+            const { link, path } = relationStack.pop();
+            console.log(link, path, 'link, path')
+            for (const key in link) {
+                if (link[key] !== null && key !== '__typename' && key !== 'value') {
+                    const isCoreRelation = ['from', 'to', 'type'].includes(path.return[key]?.relation);
+                    if (isCoreRelation) {
+                        relatableLinks.push(link); // Пропускаем не корневые связи
+                    } else {
+                        rootData = link; // сохраняем корневую связь
+                    }
+                } 
+            }
+        }
+
+        // Проверяем наличие корневой связи на уровне linksReq
+        const compareLink = linksReq.find(result => result.id === rootData.id);
+        if (compareLink) {
+            console.log('Корневая связь найдена. Обновляем...', rootData.id);
+            await processLinksIteratively(compareLink, rootData);
+        } else {
+            console.log(rootData, 'rootData')
+            console.log('Корневая связь не найдена. Добавляем...', rootData.id);
+            await processNewLinks([rootData]);
+        }
+
+        // Обработка пропущенных связей (с конца)
+        await processPendingLinks(relatableLinks);
+
+        // Углубляемся в остальные связи
+        for (const key of Object.keys(linkFolder)) {
+            if (typeof linkFolder[key] === 'object' && linkFolder[key] !== null && key !== '__typename' && key !== 'value') {
+                const newlinkReq = (linkReq && linkReq[key]) ? (Array.isArray(linkReq[key]) ? linkReq[key] : [linkReq[key]]) : [];
+                const newlinkFolder = (linkFolder[key]) ? (Array.isArray(linkFolder[key]) ? linkFolder[key] : [linkFolder[key]]) : [];
+                stack1.push({ linksReq: newlinkReq, linksFolder: newlinkFolder });
+            }
+        }
+    }
+}
+
+// Обновление файлов после всех вставок и обновлений
+
+// Функция для обновления файлов на основе собранных данных
+const updateFilePaths = async () => {
+  // Сортировка по длине пути для корректного обновления
+  console.log(updatedPaths, 'updatedPaths')
+  updatedPaths.sort((a, b) => b.path1.length - a.path1.length);
+  for (const { path1, value } of updatedPaths) {
+      const dataPath = path.join(path1, 'data.json');
+      await replaceFile(dataPath, value.id);
+      await renameFolder(path1, value.id);
+      console.log('Обновлены данные в папке:', path1);
+  }
+};
+
+await updateFilePaths();
+
+
+// 3. Сравнение и обновление названий связей
+for (const id in relationPathData.listNameLink) {
+    if (relationPathData.listNameLink[id]) {
+        const linkName = await getLinkName(id);
+        if (linkName !== relationPathData.listNameLink[id]) {
+            await deep.update({ id: id },
+              { value: relationPathData.listNameLink[id] },
+              { table: 'strings' }
+          );
+      }
+  }
+}
+};
+
+
 
   
 
@@ -1000,7 +1010,7 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
             const dataFilePath = path.join(pathSoFar, 'data.json');
             if (fs.existsSync(dataFilePath)) {
                 const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-                console.log(newData, 'newData')
+                // console.log(newData, 'newData')
                 if (!foundData) {
                     // Если это первая найденная папка с data.json, используем её как корневой объект
                     Object.assign(currentObject, newData);
