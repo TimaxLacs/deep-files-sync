@@ -240,25 +240,20 @@ const updateDataFromRelations = (dirPath, data) => {
     for (const relation of relationDirs) {
         const parentRelationPath = path.join(path.dirname(parentDir), relation);
         if (fs.existsSync(parentRelationPath) && fs.statSync(parentRelationPath).isDirectory()) {
-            const subDirs = fs.readdirSync(parentRelationPath)
-                .filter(name => fs.statSync(path.join(parentRelationPath, name)).isDirectory());
 
-            //console.log(subDirs, 'subDirs1111')
-            for (const subDir of subDirs) {
-                const subDataJsonPath = path.join(path.dirname(parentDir), 'data.json');
-                console.log(subDataJsonPath, 'subDataJsonPath1111')
-                if (dataJsonExists(subDataJsonPath)) {
-                    const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
-                    const relationId = relationData.id;
-                    console.log(data, 'data1111')
-                    console.log(relationId, 'relationId1111')
-                    // Обновляем данные в зависимости от найденного идентификатора
-                    if (relationId && !isNaN(relationId)) {
-                        if (relation === 'in') data.to_id = relationId;
-                        if (relation === 'out') data.from_id = relationId;
-                        if (relation === 'typed') data.type_id = relationId;
-                        updated = true; // Значение обновлено
-                    }
+            const subDataJsonPath = path.join(path.dirname(parentDir), 'data.json');
+            console.log(subDataJsonPath, 'subDataJsonPath1111')
+            if (dataJsonExists(subDataJsonPath)) {
+                const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
+                const relationId = relationData.id;
+                console.log(data, 'data1111')
+                console.log(relationId, 'relationId1111')
+                // Обновляем данные в зависимости от найденного идентификатора
+                if (relationId && !isNaN(relationId)) {
+                    if (relation === 'in') data.to_id = relationId;
+                    if (relation === 'out') data.from_id = relationId;
+                    if (relation === 'typed') data.type_id = relationId;
+                    updated = true; // Значение обновлено
                 }
             }
         }
@@ -275,27 +270,24 @@ const updateDataFromRelations = (dirPath, data) => {
         const currentRelationPath = path.join(path.dirname(path.dirname(dirPath)), relation);
         
         if (fs.existsSync(currentRelationPath) && fs.statSync(currentRelationPath).isDirectory()) {
-            const subDirs = fs.readdirSync(currentRelationPath).filter(name => fs.statSync(path.join(currentRelationPath, name)).isDirectory());
-            // console.log(subDirs, 'subDirs')
-            for (const subDir of subDirs) {
-                const subDataJsonPath = path.join(path.dirname(path.dirname(dirPath)), 'data.json');
-                if (dataJsonExists(subDataJsonPath)) {
-                    const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
-                    dirPath = path.dirname(path.dirname(dirPath))
-                    const relationId = data.id;
-                    data = relationData
+
+            const subDataJsonPath = path.join(path.dirname(path.dirname(dirPath)), 'data.json');
+            if (dataJsonExists(subDataJsonPath)) {
+                const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
+                dirPath = path.dirname(path.dirname(dirPath))
+                const relationId = data.id;
+                data = relationData
 
 
-                    // console.log(data, 'data')
-                    // console.log(relationId, 'relationId')
-                    // console.log(dirPath, 'dirPath')
-                    // Обновляем значения в зависимости от найденного идентификатора
-                    if (relationId && !isNaN(relationId)) {
-                        if (relation === 'from') data.from_id = relationId;
-                        if (relation === 'to') data.to_id = relationId;
-                        if (relation === 'type') data.type_id = relationId;
-                        updated = true; // Значение обновлено
-                    }
+                // console.log(data, 'data')
+                // console.log(relationId, 'relationId')
+                // console.log(dirPath, 'dirPath')
+                // Обновляем значения в зависимости от найденного идентификатора
+                if (relationId && !isNaN(relationId)) {
+                    if (relation === 'from') data.from_id = relationId;
+                    if (relation === 'to') data.to_id = relationId;
+                    if (relation === 'type') data.type_id = relationId;
+                    updated = true; // Значение обновлено
                 }
             }
         }
