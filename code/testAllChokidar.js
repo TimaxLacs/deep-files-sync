@@ -8,7 +8,7 @@ const dirPath = '/home/timax/Code/Deep-project/deep-files-sync/test';
 
 
 const renameFolder = async (filedir, link, manually) => {
-   // console.log(filedir, 'filedir')
+   console.log(filedir, 'filedir')
    try {
      let newFolderName;
      if (manually) {
@@ -27,13 +27,13 @@ const renameFolder = async (filedir, link, manually) => {
          newFolderName = folderNameParts[0] + '__' + link + suffix;
        }
      } else {
-      //  console.log(`поиск в {link}`);
-      //  console.log(link)
+       console.log(`поиск в {link}`);
+       console.log(link)
        if(typeof link != 'object') link = await deep.select({id: link})
        else link = await deep.select({id: link.id})
-       // console.log(link, 'linkFolder222')
+       console.log(link, 'linkFolder222')
        const name = await getLinkName(link.data[0].id)
-       // console.log(`название в ${name}`);
+       console.log(`название в ${name}`);
        let suffix = path.basename(filedir).split('—');
        if (suffix.length > 1) {
          suffix = '—' + suffix[1];
@@ -47,10 +47,10 @@ const renameFolder = async (filedir, link, manually) => {
      const newFolderPath = path.join(path.dirname(filedir), newFolderName);
  
      await fs.promises.rename(filedir, newFolderPath);
-     // console.log(`Папка успешно переименована в ${newFolderName}`);
+     console.log(`Папка успешно переименована в ${newFolderName}`);
      return newFolderPath;
    } catch (err) {
-     // console.error("Ошибка при переименовании папки:", err);
+     console.error("Ошибка при переименовании папки:", err);
    }
  }
  
@@ -113,109 +113,118 @@ const syncFolderNamesWithIds = (dirPath) => {
 
 // Проверка и обновление значений в зависимости от отношений
 const updateDataFromRelations = async (dirPath, data) => {
-    const dataJsonPath = path.join(dirPath, 'data.json');
-    let typedUpdate;
-    let typeUpdate = false;
-    if (!dataJsonExists(dataJsonPath)) {
-        console.log("data.json не найден в директории " + dirPath);
-        return;
-    }
-
-    let updated = false; // отслеживание обновлений
-
-
-
-    // Проверка текущей директории для отработки from, to, type
-    const currentRelationDirs = ['from', 'to', 'type'];
-
-    for (const relation of currentRelationDirs) {
-        const currentRelationPath = path.join(path.dirname(path.dirname(dirPath)), relation);
-
-        if (fs.existsSync(currentRelationPath) && fs.statSync(currentRelationPath).isDirectory()) {
-
-            const subDataJsonPath = path.join(path.dirname(path.dirname(dirPath)), 'data.json');
-            if (dataJsonExists(subDataJsonPath)) {
-                const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
-                dirPath = path.dirname(path.dirname(dirPath))
-                const relationId = data.id;
-                data = relationData
-
-
-                // console.log(data, 'data')
-                // console.log(relationId, 'relationId')
-                // console.log(dirPath, 'dirPath')
-                // Обновляем значения в зависимости от найденного идентификатора
-                if (relationId && !isNaN(relationId)) {
-                    if (relation === 'from') data.from_id = relationId;
-                    if (relation === 'to') data.to_id = relationId;
-                    if (relation === 'type') {
-                     typeUpdate = relationId
-                     //data.type_id = relationId;
-                   }
-                    updated = true; // Значение обновлено
-                }
-            }
-        }
-    }
-
-    if(typeUpdate){
-      console.log(dirPath, '--------dirPath111111111111111')
-      dirPath = await renameFolder(dirPath, typeUpdate, 'type');
-      console.log(dirPath, '--------dirPath2222222222222222')
-    }
-
-    // Записываем изменения обратно в data.json только если данные изменились
-    if (updated) {
-        updateDataJson(dirPath, data);
-    }
-
-
-    
-    // Проверка родительских директорий на наличие relations: in, out, typed
-    const parentDir = path.dirname(dirPath);
-    const relationDirs = ['in', 'out', 'typed'];
-    // console.log(dirPath, 'dirPath1111')
-    // console.log(data, 'data1111')
-    //console.log(parentDir, 'parentDir1111')
-    for (const relation of relationDirs) {
-        const parentRelationPath = path.join(path.dirname(parentDir), relation);
-        if (fs.existsSync(parentRelationPath) && fs.statSync(parentRelationPath).isDirectory()) {
-
-            const subDataJsonPath = path.join(path.dirname(parentDir), 'data.json');
-            // console.log(subDataJsonPath, 'subDataJsonPath1111')
-            if (dataJsonExists(subDataJsonPath)) {
-                const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
-                const relationId = relationData.id;
-               //  console.log(data, 'data1111')
-               //  console.log(relationId, 'relationId1111')
-                // Обновляем данные в зависимости от найденного идентификатора
-                if (relationId && !isNaN(relationId)) {
-                  if (relation === 'in') data.to_id = relationId;
-                  if (relation === 'out') data.from_id = relationId;
-                  if (relation === 'typed') {
-                    //data.type_id = relationId;
-                    typedUpdate = relationId
-                  }
-                  updated = true; // Значение обновлено
-                }
-                
-
-            }
-        }
-    }
-
-
-    if(typedUpdate && !typeUpdate){
-      console.log(dirPath, '**********dirPath111111111111111')
-      dirPath = await renameFolder(dirPath, typedUpdate, 'type');
-      console.log(dirPath, '**********dirPath2222222222222222') 
+   const dataJsonPath = path.join(dirPath, 'data.json');
+   let typedUpdate = false;
+   let typeUpdate2 = false;
+   let typeUpdate = false;
+   if (!dataJsonExists(dataJsonPath)) {
+     console.log("data.json не найден в директории " + dirPath);
+     return;
    }
+ 
+   let updated = false; // отслеживание обновлений
+ 
+   // Проверка текущей директории для отработки from, to, type
+   const currentRelationDirs = ['from', 'to', 'type'];
+ 
+   for (const relation of currentRelationDirs) {
+     const currentRelationPath = path.join(path.dirname(path.dirname(dirPath)), relation);
+ 
+     if (fs.existsSync(currentRelationPath) && fs.statSync(currentRelationPath).isDirectory()) {
+ 
+       const subDataJsonPath = path.join(path.dirname(path.dirname(dirPath)), 'data.json');
+       if (dataJsonExists(subDataJsonPath)) {
+         const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
+         dirPath = path.dirname(path.dirname(dirPath))
+         const relationId = data.id;
+         data = relationData
+ 
+         // Обновляем значения в зависимости от найденного идентификатора
+         if (relationId && !isNaN(relationId)) {
+           if (relation === 'from') {
+             if (data.from_id !== relationId) {
+               data.from_id = relationId;
+               updated = true; // Значение обновлено
+             }
+           }
+           if (relation === 'to') {
+             if (data.to_id !== relationId) {
+               data.to_id = relationId;
+               updated = true; // Значение обновлено
+             }
+           }
+           if (relation === 'type') {
+            typeUpdate2 = true;
+             if (data.type_id !== relationId) {
+               typeUpdate = relationId;
+               updated = true; // Значение обновлено
+             }
+           }
+         }
+       }
+     }
+   }
+ 
+   if(typeUpdate){
+     dirPath = await renameFolder(dirPath, typeUpdate, 'type');
+   }
+ 
+   // Записываем изменения обратно в data.json только если данные изменились
+   if (updated) {
+     updateDataJson(dirPath, data);
+   }
+ 
+   // Проверка родительских директорий на наличие relations: in, out, typed
+   const parentDir = path.dirname(dirPath);
+   const relationDirs = ['in', 'out', 'typed'];
+ 
+   for (const relation of relationDirs) {
+     const parentRelationPath = path.join(path.dirname(parentDir), relation);
+     if (fs.existsSync(parentRelationPath) && fs.statSync(parentRelationPath).isDirectory()) {
+ 
+       const subDataJsonPath = path.join(path.dirname(parentDir), 'data.json');
+       if (dataJsonExists(subDataJsonPath)) {
+         const relationData = JSON.parse(fs.readFileSync(subDataJsonPath, 'utf-8'));
+         const relationId = relationData.id;
+ 
+         // Обновляем данные в зависимости от найденного идентификатора
+         if (relationId && !isNaN(relationId)) {
+           if (relation === 'in') {
+             if (data.to_id !== relationId) {
+               data.to_id = relationId;
+               updated = true; // Значение обновлено
+             }
+           }
+           if (relation === 'out') {
+             if (data.from_id !== relationId) {
+               data.from_id = relationId;
+               updated = true; // Значение обновлено
+             }
+           }
+           if (relation === 'typed') {
+             if (data.type_id !== relationId && !typeUpdate) {
+               if(!fs.existsSync(path.join(dirPath, 'type'))){
+                  typedUpdate = relationId;
+                  // updated = true; // Значение обновлено
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+ 
+   //console.log(typeUpdate2, 'typeUpdate2')
+   if(typedUpdate){
+     dirPath = await renameFolder(dirPath, typedUpdate, 'type');
+   }
+ 
+   // Записываем изменения обратно в data.json только если данные изменились
+   if (updated) {
+     updateDataJson(dirPath, data);
+   }
+ };
 
-    if (updated) {
-      updateDataJson(dirPath, data);
-    }
-
-};
 
 // Обработка изменений
 const processChanges = (dirPath) => {
@@ -361,14 +370,21 @@ watcher.on('rename', (oldPath, newPath) => {
 // Обработка существующих директорий при старте
 const initialScan = (dirPath) => {
    if (fs.existsSync(dirPath)) {
+     try {
        const subDirs = fs.readdirSync(dirPath).filter(name => fs.statSync(path.join(dirPath, name)).isDirectory());
        for (const subDir of subDirs) {
-           const subDirPath = path.join(dirPath, subDir);
-           processChanges(subDirPath);
+         const subDirPath = path.join(dirPath, subDir);
+         processChanges(subDirPath);
+         if (fs.existsSync(subDirPath)) {
            initialScan(subDirPath);
+         }
        }
+     } catch (err) {
+       console.error(`Ошибка при сканировании директории ${dirPath}:`, err);
+     }
    }
-};
+ };
+ 
 
 // Начальный обход существующих директорий
 initialScan(dirPath);
