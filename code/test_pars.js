@@ -163,6 +163,33 @@ const createDataFile = async (link, directoryPath) => {
 };
 
 
+// Функция для выполнения асинхронного кода
+const executeAsync = async (code) => {
+  console.log(code, 'codeeee')
+  return new Promise((resolve, reject) => {
+      try {
+          const func = async () => {
+              return await eval(code);
+          };
+          resolve(func());
+      } catch (err) {
+          console.error(`Ошибка при выполнении кода: ${err}`);
+          reject(err);
+      }
+  });
+};
+
+
+const executeAsync1 = async (func) => {
+  try {
+      return await func(); 
+  } catch (err) {
+      console.error(`Ошибка при выполнении команды: ${err}`);
+      throw err; 
+  }
+};
+
+
 const replaceFile = async (filedir, link) => {
   // console.log(filedir, link, 'filedir, link')
   try {
@@ -289,6 +316,8 @@ const updateDataJson = (dirPath, data) => {
 
 
 
+
+
 // Функция для сохранения данных подписки в файл
 const saveSubscriptionData = async (data, currentDir, type) => {
   let maxId = 0;
@@ -310,10 +339,9 @@ const saveSubscriptionData = async (data, currentDir, type) => {
 
   try {
       // Преобразуем объект в строку
-      const formattedData = JSON.stringify(data, null, 2); // Форматируем с отступами для читаемости
+      console.log(data, 'data')
 
-      // Записываем данные в файл
-      fs.writeFileSync(subFilePath, formattedData); 
+      fs.writeFileSync(subFilePath, data); 
 
       console.log(`Сохранено значение подписки в файл ${subFileName}`);
       return {
@@ -329,12 +357,15 @@ const saveSubscriptionData = async (data, currentDir, type) => {
 
 
 // Функция для обработки подписки и настройки наблюдателей
-const handleSubscriptionOut = async (data, currentDir) => {
-  console.log(data, 'data'); // Логируем данные
-  console.log(currentDir, 'currentDir'); // Логируем текущую директорию
+const handleSubscriptionOut = async (data, currentDir, startType=false) => {
 
-  const subscriptionData = await saveSubscriptionData(data, currentDir, 'Out');
-  
+  let subscriptionData;
+  if(!startType){
+    subscriptionData = await saveSubscriptionData(data, currentDir, 'Out');
+  }else{
+    subscriptionData = {filePath: startType, folderName: path.basename(startType)}
+  }
+
   try{
 
     console.log(subscriptionData, 'subscriptionData');
@@ -367,49 +398,39 @@ const handleSubscriptionOut = async (data, currentDir) => {
 };
 
 
+const testSubInStart = async (data, currentDir) => {
+  console.log(data, 'dataaaa')
+  const result = await executeAsync(data);
 
+  handleSubscriptionIn(data, currentDir, result); // Восстанавливаем подписку
+}
 
 // Функция для загрузки и восстановления всех подписок при старте
-const loadSubscriptionsOnStartup = (currentDir) => {
+const loadSubscriptionsOnStartup = async (currentDir) => {
   const files = fs.readdirSync(currentDir);
   files.forEach(file => {
-      if (file.startsWith('subOut') && file.endsWith('.json')) {
-          const subscriptionFilePath = path.join(currentDir, file);
-          const data = JSON.parse(fs.readFileSync(subscriptionFilePath, 'utf8'));
-          handleSubscriptionOut(data, currentDir); // Восстанавливаем подписку
-      }
+      const filePath = path.join(currentDir, file);
+
+      // Проверка, является ли это директорией
+      if (fs.statSync(filePath).isDirectory()) {
+          // Рекурсивный вызов для поддиректорий
+          loadSubscriptionsOnStartup(filePath);
+      } else if (file.startsWith('subOut') && file.endsWith('.json')) {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        handleSubscriptionOut(data, currentDir, filePath); // Восстанавливаем подписку
+      } else if (file.startsWith('subIn') && file.endsWith('.json')) {
+        const data = fs.readFileSync(filePath, 'utf8')
+        testSubInStart(data, currentDir);
+        //handleSubscriptionIn(data, currentDir, filePath); // Восстанавливаем подписку
+    }
   });
 };
+
+
 loadSubscriptionsOnStartup(dirPath)
 
 
 
-
-
-// Функция для выполнения асинхронного кода
-const executeAsync = async (code) => {
-  return new Promise((resolve, reject) => {
-      try {
-          const func = async () => {
-              return await eval(code);
-          };
-          resolve(func());
-      } catch (err) {
-          console.error(`Ошибка при выполнении кода: ${err}`);
-          reject(err);
-      }
-  });
-};
-
-
-const executeAsync1 = async (func) => {
-  try {
-      return await func(); 
-  } catch (err) {
-      console.error(`Ошибка при выполнении команды: ${err}`);
-      throw err; 
-  }
-};
 
 
 
@@ -621,7 +642,6 @@ const handleRequest = async (parsedData, currentDir) => {
     // релейшн запрос
     if (parsedData.relationPath && parsedData.relationPath.length > 0) {
       relationPathData = await processPath(parsedData.relationPath, currentDir, 'relation', commandResults);
-      let  commandRequestResult;
       //console.log(commandResults, '------1111')
       if (commandResults) {
         //console.log(commandResults, '------')
@@ -652,11 +672,12 @@ const handleRequest = async (parsedData, currentDir) => {
 
 
 const checResultsWithCurrent = async (commandInstructions, relationPathData) => {
-  console.log('*************');
-  console.log(relationPathData);
-  console.log(relationPathData.results[0]);
-  console.log(relationPathData.results[0].outText);
-  console.log('*************');
+  let stateInsert = false;
+  // console.log('*************');
+  // console.log(relationPathData);
+  // console.log(relationPathData.results[0]);
+  // console.log(relationPathData.results[0].outText);
+  // console.log('*************');
   const updatedPaths = []; // Массив для хранения путей и изменений
 
   // Итеративная обработка связей
@@ -754,6 +775,7 @@ const processNewLinks = async (newLinks) => {
                 data.string = { data: { value: newLink.value.value } };
             }
             const insert = await deep.insert(data);
+            stateInsert = true;
             await updateOldLinks(newLinks, newLink.id, insert.data[0].id);
             console.log('Создана новая связь:', JSON.stringify(data));
         } else {
@@ -863,6 +885,7 @@ const updateOldLinks = async(links, oldId, newId) => {
 // 1. Обработка на корневом уровне, используя итеративный подход
 const linksReq = [];
 
+console.log(commandInstructions, 'commandInstructions')
 for (const commandDetail of commandInstructions) {
   const commandResult = await executeAsync1(() => deep.select(commandDetail));
   linksReq.push(...commandResult.data);
@@ -908,17 +931,22 @@ while (stack1.length > 0) {
             console.log(link, path, 'link, path')
             for (const key in link) {
                 if (link[key] !== null && key !== '__typename' && key !== 'value') {
+                  if(path.return){
                     const isCoreRelation = ['from', 'to', 'type'].includes(path?.return[key]?.relation);
                     if (isCoreRelation) {
                         relatableLinks.push(link); // Пропускаем не корневые связи
                     } else {
                         rootData = link; // сохраняем корневую связь
                     }
+                  } else{
+                    rootData = link;
+                  }
                 } 
             }
         }
 
         // Проверяем наличие корневой связи на уровне linksReq
+        console.log(rootData, 'rootDatarootDatarootData')
         const compareLink = linksReq.find(result => result.id === rootData.id);
         if (compareLink) {
             console.log('Корневая связь найдена. Обновляем...', rootData.id);
@@ -944,7 +972,9 @@ while (stack1.length > 0) {
 }
 
 // Обновление файлов после всех вставок и обновлений
-await updateFilePaths();
+if(stateInsert){
+  await updateFilePaths();
+}
 
 
 // 3. Сравнение и обновление названий связей
@@ -1090,13 +1120,16 @@ for (const id in relationPathData.listNameLink) {
             //console.log(cleanPath, 'cleanPath00000')
             //console.log(data, 'data00000')
         
-            //console.log(commandRelation, 'commandRelation00000')
+            console.log(path.dirname(currentDir), 'path.dirname(currentDir)00000')
+            console.log(cleanPath, 'cleanPath00000')
+            console.log(data, 'data00000')
+            console.log(commandRelation, 'commandRelation00000')
             const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
+
+            if(pathToObjResult.queries) queries.push(...[pathToObjResult.queries]);
+            if(pathToObjResult.result) results.push(...[pathToObjResult.result]);
             console.log(queries, 'queries')
-            console.log(pathToObjResult.queries, 'pathToObjResult.queries')
-            queries.push(...pathToObjResult.queries);
-            results.push(...[pathToObjResult.result]);
-          }
+            }
           //console.log('Обработаны данные связи из папки:', data);
         } 
         // если нужны все папки внутри только этой директории
@@ -1242,25 +1275,28 @@ for (const id in relationPathData.listNameLink) {
     for (var i = 0; i < segments.length; i++) {
         let pathSoFar = '';
         for (let j = 0; j <= i; j++) {
-
           pathSoFar = path.join(pathSoFar, segments[j]);
-
         }
 
         pathSoFar = path.join(currentPath, pathSoFar);
 
+        console.log(pathSoFar, 'pathSoFar//////')
         if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
             const dataFilePath = path.join(pathSoFar, 'data.json');
             if (fs.existsSync(dataFilePath)) {
+              console.log(pathSoFar, 'pathSoFar//////222222')
                 const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
                 // console.log(newData, 'newData')
                 if (!foundData) {
                     // Если это первая найденная папка с data.json, используем её как корневой объект
                     Object.assign(currentObject, newData);
                     foundData = true;
+                    console.log(currentObject, 'currentObject//////00000')
+                    console.log(queries, 'queries//////00000')
                     continue; // Переходим к следующему сегменту
                 }
 
+                console.log(currentObject, 'currentObject//////')
                 // Логика для работы с отношениями
                 let relationName = segments[i-1] + 'Text';
                 for (const key in relationsPath) {
@@ -1278,9 +1314,14 @@ for (const id in relationPathData.listNameLink) {
                 }
 
                 currentObject = currentObject[relationName]; // Обновляем текущий объект
+
+                console.log(currentObject, 'currentObject//////1111')
+                console.log(queries, 'queries/////111')
+                console.log(relations, 'relations/////111')
                 if (!relations) {
                     if (foundData && queries) {
                         returnObj = queries[queries.length - 1].return;
+                        console.log(queries, 'queries/////111')
                         for (let k = 1; k < (i-1); k++) {
                           returnObj = returnObj[Object.keys(returnObj)[0]].return;
                           returnObj[relationName] = { relation: segments[i-1], return: {} };
@@ -1296,10 +1337,15 @@ for (const id in relationPathData.listNameLink) {
                         query.return[relationName] = { relation: segments[i-1], return: {} };
                         if(queries == undefined) queries = []
                         queries.push(query);
+                        console.log(queries, 'queries/////')
                     }
                 }
             }
         }
+    }
+
+    if(!queries){
+      queries = {id: data.id}
     }
 
     return { result: data, queries: queries };
@@ -1593,7 +1639,7 @@ const commandStraightSync = async (commandResults, straightPathData) => {
 const processResult = async (resultData, data, currentDir) => {
   // Если это подписка, используем полученный resultData
   if (resultData && typeof resultData.subscribe === 'function') {
-      const subscriptionResult = await handleSubscriptionIn(resultData, currentDir, data);
+      await handleSubscriptionIn(data, currentDir, resultData);
       return
   }
 
@@ -1639,7 +1685,8 @@ const selectSimple = async (resultData, currentDir, subName = null) => {
 
 
 
-const handleSubscriptionIn = async (subscription, currentDir, data) => {
+const handleSubscriptionIn = async (data, currentDir, subscription) => {
+  console.log(subscription, 'subscription')
     const subscriptionData = await saveSubscriptionData(data, currentDir, 'In');
     
     if (subscriptionData.filePath) {
@@ -1884,89 +1931,110 @@ const processChanges = (dirPath) => {
 
 
 
+ const debounce = (func, wait) => {
+  let timeout;
+  return function (...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func.apply(this, args);
+    }, wait);
+  };
+};
+
 // Настройка наблюдателя на изменения
 const watcher = chokidar.watch(dirPath, { persistent: true });
 
+const handleRename = debounce((oldPath, newPath) => {
+  try {
+    processChanges(path.dirname(newPath));
+  } catch (err) {
+    console.error(`Ошибка при обработке переименования директории ${oldPath}:`, err);
+    const errorFilePath = path.join(path.dirname(oldPath), 'error.txt');
+    fs.writeFileSync(errorFilePath, `Ошибка при обработке переименования директории: ${err.message}`);
+  }
+}, 1000);
 
+const handleAddDir = debounce((path1) => {
+  try {
+    if (!path.basename(path1).startsWith(".")) {
+      processChanges(path1);
+    }
+  } catch (err) {
+    console.error(`Ошибка при обработке добавления директории ${path1}:`, err);
+    const errorFilePath = path.join(path1, 'error.txt');
+    fs.writeFileSync(errorFilePath, `Ошибка при обработке добавления директории: ${err.message}`);
+  }
+}, 1000);
 
-watcher.on('rename', (oldPath, newPath) => {
-   try {
-      setTimeout(() => processChanges(path.dirname(newPath)), 100);
-   } catch (err) {
-     console.error(`Ошибка при обработке переименования директории ${oldPath}:`, err);
-     const errorFilePath = path.join(path.dirname(oldPath), 'error.txt');
-     fs.writeFileSync(errorFilePath, `Ошибка при обработке переименования директории: ${err.message}`);
-   }
- }).on('addDir', path1 => {
-   try {
-      if (!path.basename(path1).startsWith(".")) {
-         //console.log("Папка добавлена: " + path1);
-         setTimeout(() => processChanges(path1), 100);
-     }
-   } catch (err) {
-     console.error(`Ошибка при обработке добавления директории ${path1}:`, err);
-     const errorFilePath = path.join(path1, 'error.txt');
-     fs.writeFileSync(errorFilePath, `Ошибка при обработке добавления директории: ${err.message}`);
-   }
- }).on('change', path1 => {
-   try {
-      if (!path.basename(path1).startsWith(".") && !path.basename(path1).includes('data.json')) {
-         console.log("Изменение: " + path1);
-         setTimeout(() => processChanges(path.dirname(path1)), 100);
-  
-         // Обработка изменения value.txt
-         if (path.basename(path1) === 'value.txt') {
-             const currentDir = path.dirname(path1);
-             const dataJsonPath = path.join(currentDir, 'data.json');
-             if (fs.existsSync(dataJsonPath)) {
-                 const data = JSON.parse(fs.readFileSync(dataJsonPath, 'utf8'));
-                 if (data.value != undefined || data.value != null) {
-                    if (data.value.value) {
-                       const newValue = fs.readFileSync(path1, 'utf8').trim();
-                       data.value.value = newValue;
-                       updateDataJson(currentDir, data);
-                    }
-                 }
-             }
-         }
-  
-         // Сохранение содержимого eval.js при изменении
-         if (path.basename(path1) === 'eval.js') {
-             const evalPath = path1;
-             evalData[evalPath] = fs.readFileSync(evalPath, 'utf8');
-         }
-     }
-   } catch (err) {
-     console.error(`Ошибка при обработке изменения файла ${path1}:`, err);
-     const errorFilePath = path.join(path.dirname(path1), 'error.txt');
-     fs.writeFileSync(errorFilePath, `Ошибка при обработке изменения файла: ${err.message}`);
-   }
- }).on('unlink', path1 => {
-   try {
+const handleChange = debounce((path1) => {
+  try {
+    if (!path.basename(path1).startsWith(".") && !path.basename(path1).includes('data.json')) {
+      console.log("Изменение: " + path1);
+      processChanges(path.dirname(path1));
+
+      // Обработка изменения value.txt
+      if (path.basename(path1) === 'value.txt') {
+        const currentDir = path.dirname(path1);
+        const dataJsonPath = path.join(currentDir, 'data.json');
+        if (fs.existsSync(dataJsonPath)) {
+          const data = JSON.parse(fs.readFileSync(dataJsonPath, 'utf8'));
+          if (data.value != undefined || data.value != null) {
+            if (data.value.value) {
+              const newValue = fs.readFileSync(path1, 'utf8').trim();
+              data.value.value = newValue;
+              updateDataJson(currentDir, data);
+            }
+          }
+        }
+      }
+
+      // Сохранение содержимого eval.js при изменении
       if (path.basename(path1) === 'eval.js') {
-         const currentDir = path.dirname(path1);
-         const evalPath = path1;
-         if (evalData[evalPath]) {
-             fs.promises.writeFile(evalPath, evalData[evalPath])
-                 .then(() => {
-                     executeEvalFile(evalPath, currentDir);
-                 })
-                 .catch(error => {
-                     console.error('Ошибка восстановления eval.js:', error);
-                 });
-         }
-     }
-   } catch (err) {
-     console.error(`Ошибка при обработке удаления файла ${path1}:`, err);
-     const errorFilePath = path.join(path.dirname(path1), 'error.txt');
-     fs.writeFileSync(errorFilePath, `Ошибка при обработке удаления файла: ${err.message}`);
-   }
- }).on('error', error => {
-   console.error("Ошибка с наблюдателем:", error);
-   const errorFilePath = path.join(dirPath, 'error.txt');
-   fs.writeFileSync(errorFilePath, `Ошибка с наблюдателем: ${error.message}`);
- });
-// ...
+        const evalPath = path1;
+        evalData[evalPath] = fs.readFileSync(evalPath, 'utf8');
+      }
+    }
+  } catch (err) {
+    console.error(`Ошибка при обработке изменения файла ${path1}:`, err);
+    const errorFilePath = path.join(path.dirname(path1), 'error.txt');
+    fs.writeFileSync(errorFilePath, `Ошибка при обработке изменения файла: ${err.message}`);
+  }
+}, 1000);
+
+const handleUnlink = debounce((path1) => {
+  try {
+    if (path.basename(path1) === 'eval.js') {
+      const currentDir = path.dirname(path1);
+      const evalPath = path1;
+      if (evalData[evalPath]) {
+        fs.promises.writeFile(evalPath, evalData[evalPath])
+          .then(() => {
+            executeEvalFile(evalPath, currentDir);
+          })
+          .catch(error => {
+            console.error('Ошибка восстановления eval.js:', error);
+          });
+      }
+    }
+  } catch (err) {
+    console.error(`Ошибка при обработке удаления файла ${path1}:`, err);
+    const errorFilePath = path.join(path.dirname(path1), 'error.txt');
+    fs.writeFileSync(errorFilePath, `Ошибка при обработке удаления файла: ${err.message}`);
+  }
+}, 1000);
+
+const handleError = debounce((error) => {
+  console.error("Ошибка с наблюдателем:", error);
+  const errorFilePath = path.join(dirPath, 'error.txt');
+  fs.writeFileSync(errorFilePath, `Ошибка с наблюдателем: ${error.message}`);
+}, 1000);
+
+watcher.on('rename', handleRename)
+  .on('addDir', handleAddDir)
+  .on('change', handleChange)
+  .on('unlink', handleUnlink)
+  .on('error', handleError);
+
 
 // Обработка существующих директорий при старте
 const initialScan = (dirPath) => {
