@@ -614,7 +614,7 @@ const handleRequest = async (parsedData, currentDir) => {
       console.log(relationPathData, '------1111')
       
 
-      //await fs.promises.writeFile(path.join(currentDir, 'tets.json'), JSON.stringify(relationPathData, null, 2), { flag: 'w' })
+      await fs.promises.writeFile(path.join(currentDir, 'tets.json'), JSON.stringify(relationPathData, null, 2), { flag: 'w' })
 
 
 
@@ -656,8 +656,6 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
   let stateInsert = false;
   console.log('*************');
   console.log(relationPathData);
-  console.log(relationPathData.results[0]);
-  console.log(relationPathData.results[0].outText);
   console.log('*************');
   const updatedPaths = []; // Массив для хранения путей и изменений
 
@@ -977,344 +975,258 @@ const processNewLinks = async (newLinks) => {
 
   
 
+const processPath = async (straightPath, currentDir, mode, commandRelation) => {
+  const queue = [];
+  const results = [];
+  const listNameLink = {};
+  const pathResults = [];
+  const queries = [];
+  let cleanPath;
+  let nameLink;
+  for (const userPath of straightPath) {
+    cleanPath = userPath;
 
+    if (userPath.startsWith('-')) {
+      cleanPath = userPath.substring(1);
+    }
 
-  const processPath = async (straightPath, currentDir, mode, commandRelation) => {
-  
-    let results = [];
-    const listNameLink = {};
-    const pathResults = [];
-    let nameLink;
-    let queries = [];
-    for (const userPath of straightPath) {
-      let cleanPath = userPath;
-  
-      if (userPath.startsWith('-')) {
-        cleanPath = userPath.substring(1); 
-      }
-    
-      if (userPath.endsWith('~')) {
-        cleanPath = userPath.substring(0, userPath.length - 1); 
-      }
+    if (userPath.endsWith('~')) {
+      cleanPath = userPath.substring(0, userPath.length - 1);
+    }
 
-      
-      let absoluteCleanPath = path.join(currentDir, cleanPath);
-  
+    let absoluteCleanPath = path.join(currentDir, cleanPath);
 
-      if(path.basename(absoluteCleanPath) === 'data.json' ){
-        absoluteCleanPath = path.dirname(absoluteCleanPath).split(path.sep).pop();
-      }
-  
-      // проверка по id папки-связи
+    if (path.basename(absoluteCleanPath) === 'data.json') {
+      absoluteCleanPath = path.dirname(absoluteCleanPath).split(path.sep).pop();
+    }
+
+    // проверка по id папки-связи
+    if (!fs.existsSync(absoluteCleanPath)) {
+      const lastDirectory = path.basename(path.dirname(absoluteCleanPath));
+      const firstValue = lastDirectory.split('__')[0];
+      const parentDirectory = path.dirname(path.dirname(absoluteCleanPath));
+      const parentDirectory1 = path.dirname(path.dirname(cleanPath));
+
+      cleanPath = fs.readdirSync(parentDirectory1).find(folder => folder.startsWith(`${firstValue}__`));
+      absoluteCleanPath = fs.readdirSync(parentDirectory).find(folder => folder.startsWith(`${firstValue}__`));
+
       if (!fs.existsSync(absoluteCleanPath)) {
-          const lastDirectory = path.basename(path.dirname(absoluteCleanPath));
-          const firstValue = lastDirectory.split('__')[0];
-          const parentDirectory = path.dirname(path.dirname(absoluteCleanPath));
-          const parentDirectory1 = path.dirname(path.dirname(cleanPath));
-
-
-          cleanPath = fs.readdirSync(parentDirectory1).find(folder => folder.startsWith(`${firstValue}__`));  
-          absoluteCleanPath = fs.readdirSync(parentDirectory).find(folder => folder.startsWith(`${firstValue}__`));  
-  
-          if (!fs.existsSync(absoluteCleanPath)) {
-            console.warn(`Путь не существует: ${absoluteCleanPath}`);
-            continue; 
-          }
-        }
- 
-      if (fs.existsSync(absoluteCleanPath)) {
-        const files = fs.readdirSync(absoluteCleanPath);
-        const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
-  
-        // если папка - папка-связь
-        if (hasRelationFiles && !userPath.endsWith("~")) {
-          // обрабатываем файл data.json
-          const dataFilePath = path.join(absoluteCleanPath, 'data.json');
-          const folderName = path.basename(absoluteCleanPath);
-          let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-          data = {...data};
-          if(data.data) data = data.data[0];
-
-          //console.log(mode, 'mode')
-          if(mode == 'straight'){
-  
-            // удаляем, если пользователь указан на это
-            if(userPath.startsWith("-")){
-              await deep.delete({id:data.id});
-              continue;
-            }
-  
-            // Читаем значение из value.txt
-            let value = fs.readFileSync(path.join(absoluteCleanPath, 'value.txt'), 'utf-8');
-            if(value == 'null') value = null;
-            if(data.value || data.value != null) {
-              if(data.value.value != value) data.value.value = value;
-            }
-  
-            // Получаем имя ссылки 
-            if(data.id){
-              nameLink = folderName.split('__').length >= 3 ? folderName.split('__')[1] : await getLinkName(data?.id);
-            }
-
-            // обновляем данные 
-            
-            listNameLink[data.id] = nameLink;
-
-            if (!results.find((item) => item.id === data.id)) {
-              results.push(data); // Делаем "распаковку" массива
-            }
-            if (!pathResults.find((item) => item.id === data.id)) {
-              pathResults.push({ id: data.id, path: absoluteCleanPath }); // Делаем "распаковку"массива
-            }
-
-          }
-          else if(mode == 'relation'){
-            cleanPath = path.join(path.basename(currentDir), cleanPath);
-            const currentDirNotOneDir = path.dirname(currentDir)
-            const pathParts = cleanPath.split(path.sep);
-            for (let i = pathParts.length - 1; i >= 0; i--) {
-              const currentDir1 = pathParts.slice(0, i + 1).join(path.sep);
-              if (fs.existsSync(path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json'))) {
-                const dataFilePath = path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json');
-                const folderName = path.basename(path.join(currentDirNotOneDir, currentDir1));
-                
-                data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-                data = {...data}
-                if(data.data) data = data.data[0]
-
-                // Вызов функции обновления данных на основе папок отношений
-                //await updateDataFromRelations(path.join(currentDirNotOneDir, currentDir1));
-  
-                //  удаляем, если пользователь указал на это
-                if(userPath.startsWith("-")){
-                  await deep.delete({id: data.id});
-                  continue;
-                }
-  
-  
-                if (!nameLink && folderName.split('__').length >= 3) nameLink = folderName.split('__')[1];
-                else nameLink = await getLinkName(data.id);
-  
-                // обновляем данные 
-                listNameLink[data.id] = nameLink;
-
-
-                if (!pathResults.find((item) => item.id === data.id)) {
-                  pathResults.push({ id: data.id, path: absoluteCleanPath }); // Добавляем id и путь текущей связи-папки
-                }
-              }
-            }
-            if(userPath.startsWith("-")){
-              continue;
-            }
-  
-            const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
-
-            if (pathToObjResult.queries) {
-              pathToObjResult.queries.forEach(query => {
-                if (!queries.some(q => q.id === query.id)) {
-                  queries.push(query);
-                }
-              });
-            }
-
-            if (pathToObjResult && pathToObjResult.results) {
-              pathToObjResult.results.forEach(result => {
-                if (!results.some(q => q.id === result.id)) {
-                  results.push(result);
-                }
-              });
-            }
-
-          }
-        } 
-        // если нужны все папки внутри только этой директории
-        else if(userPath.endsWith("~")){
-          // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-          const linkDirs = files.filter(file => fs.statSync(path.join(absoluteCleanPath, file)).isDirectory());
-  
-          for (const linkDir of linkDirs) {
-            let linkDirPath = path.join(path.relative(currentDir, absoluteCleanPath), linkDir);
-
-            // удаляем, если пользователь указал на это 
-            if(userPath.startsWith("-")){
-              linkDirPath = `-${linkDirPath}`
-            }
-  
-            // Проверяем, есть ли поддиректории в текущей директории
-            const subDirs = fs.readdirSync(path.join(absoluteCleanPath, linkDir)).filter(file => fs.statSync(path.join(absoluteCleanPath, linkDir, file)).isDirectory());
-
-            // Проверяем, есть ли поддиректории в директории
-            if (subDirs.length > 0) {
-              linkDirPath += "~"; // Если есть поддиректории, добавляем "~" в конец пути
-            }
-
-            // Запускаем рекурсивный вызов и собираем результаты
-            const linkResults = await processPath([linkDirPath], currentDir, mode, commandRelation);
-
-            if(mode == 'straight'){
-
-              // обновляем данные
-              if (linkResults.results) {
-                linkResults.results.forEach(result => {
-                  if (!results.some(q => q.id === result.id)) {
-                    results.push(result);
-                  }
-                });
-              }
-
-              if (linkResults.path) {
-                linkResults.path.forEach(path => {
-                  if (!pathResults.some(q => q.id === path.id)) {
-                    pathResults.push(path);
-                  }
-                });
-              }
-
-              if (linkResults && linkResults.queries) {
-                linkResults.queries.forEach(query => {
-                  if (!queries.some(q => q.id === query.id)) {
-                    queries.push(query);
-                  }
-                });
-              }
-              
-
-              if (linkResults && linkResults.listNameLink) {
-                Object.assign(listNameLink, linkResults.listNameLink);
-              }
-              
-            }
-            else if(mode == 'relation'){
-
-               // Вызов функции обновления данных на основе папок отношений
-               //if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
-
-                if (linkResults.queries) {
-                  linkResults.queries.forEach(query => {
-                    if (!queries.some(q => q.id === query.id)) {
-                      queries.push(query);
-                    }
-                  });
-                }
-  
-                if (linkResults && linkResults.results) {
-                  linkResults.results.forEach(result => {
-                    if (!results.some(q => q.id === result.id)) {
-                      results.push(result);
-                    }
-                  });
-                }
-
-                if (linkResults.path) {
-                  linkResults.path.forEach(path => {
-                    if (!pathResults.some(q => q.id === path.id)) {
-                      pathResults.push(path);
-                    }
-                  });
-                }
-
-                Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
-              }
-            //}
-          }
-        }
-        // пробуем поиск по 1 уровню вложенности 
-        else{
-          // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-          const linkDirs = files.filter(file => fs.statSync(path.join(absoluteCleanPath, file)).isDirectory());
-  
-          for (const linkDir of linkDirs) {
-            let linkDirPath = path.join(path.basename(absoluteCleanPath), linkDir);
-  
-            // удаляем, если пользователь указал на это 
-            if(userPath.startsWith("-")){
-              linkDirPath = `-${linkDirPath}`
-            }
-  
-            // Запускаем рекурсивный вызов и собираем результаты
-            const linkResults = await processPath([linkDirPath], currentDir, mode, commandRelation);
-            if(mode == 'straight'){
-
-              // обновляем данные
-              if (linkResults && linkResults.queries) {
-                linkResults.queries.forEach(query => {
-                  if (!queries.some(q => q.id === query.id)) {
-                    queries.push(query);
-                  }
-                });
-              }
-              
-
-              if (linkResults.results) {
-                linkResults.results.forEach(result => {
-                  if (!results.some(q => q.id === result.id)) {
-                    results.push(result);
-                  }
-                });
-              }
-
-              if (linkResults.path) {
-                linkResults.path.forEach(path => {
-                  if (!pathResults.some(q => q.id === path.id)) {
-                    pathResults.push(path);
-                  }
-                });
-              }
-              
-              if (linkResults && linkResults.listNameLink) {
-                Object.assign(listNameLink, linkResults.listNameLink);
-              }
-              
-            }
-            else if(mode == 'relation'){
-
-              if (linkResults.path) {
-                linkResults.path.forEach(path => {
-                  if (!pathResults.some(q => q.id === path.id)) {
-                    pathResults.push(path);
-                  }
-                });
-              }
-               // Вызов функции обновления данных на основе папок отношений
-               //if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
-               
-              // обновляем данные
-                if (linkResults.queries) {
-                  linkResults.queries.forEach(query => {
-                    if (!queries.some(q => q.id === query.id)) {
-                      queries.push(query);
-                    }
-                  });
-                }
-  
-                if (linkResults && linkResults.results) {
-                  linkResults.results.forEach(result => {
-                    if (!results.some(q => q.id === result.id)) {
-                      results.push(result);
-                    }
-                  });
-                }
-
-                Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
-              }
-          }
-        }
-      } 
-      else {
         console.warn(`Путь не существует: ${absoluteCleanPath}`);
+        continue;
       }
     }
-  
-    // Удаляем "~" из путей
-    pathResults.forEach(result => {
-      if (result.path.endsWith("~")) {
-        result.path = result.path.slice(0, -1);
+
+    queue.push({ currentPath: absoluteCleanPath, mode, commandRelation, userPath });
+  }
+
+  while (queue.length > 0) {
+    const { currentPath, mode, commandRelation, userPath } = queue.shift();
+
+    if (fs.existsSync(currentPath)) {
+      const files = fs.readdirSync(currentPath);
+      const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
+
+      // если папка - папка-связь
+      if (hasRelationFiles && !userPath.endsWith("~")) {
+        // обрабатываем файл data.json
+        const dataFilePath = path.join(currentPath, 'data.json');
+        const folderName = path.basename(currentPath);
+        let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+        data = { ...data };
+        if (data.data) data = data.data[0];
+
+        //console.log(mode, 'mode')
+        if (mode == 'straight') {
+
+          // удаляем, если пользователь указан на это
+          if (userPath.startsWith("-")) {
+            await deep.delete({ id: data.id });
+            continue;
+          }
+
+          // Читаем значение из value.txt
+          let value = fs.readFileSync(path.join(currentPath, 'value.txt'), 'utf-8');
+          if (value == 'null') value = null;
+          if (data.value || data.value != null) {
+            if (data.value.value != value) data.value.value = value;
+          }
+
+          // Получаем имя ссылки
+
+
+          // обновляем данные
+          if(folderName.split('__').length >= 3) {
+            nameLink = folderName.split('__')[1]
+            listNameLink[data.id] = nameLink;
+          }
+
+          if (!results.find((item) => item.id === data.id)) {
+            results.push(data); // Делаем "распаковку" массива
+          }
+          if (!pathResults.find((item) => item.id === data.id)) {
+            pathResults.push({ id: data.id, path: currentPath }); // Делаем "распаковку"массива
+          }
+
+        } else if (mode == 'relation') {
+          cleanPath = path.join(path.basename(currentDir), path.relative(currentDir, currentPath));
+          const currentDirNotOneDir = path.dirname(currentDir)
+          const pathParts = cleanPath.split(path.sep);
+          for (let i = pathParts.length - 1; i >= 0; i--) {
+            const currentDir1 = pathParts.slice(0, i + 1).join(path.sep);
+            if (fs.existsSync(path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json'))) {
+              const dataFilePath = path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json');
+              const folderName = path.basename(path.join(currentDirNotOneDir, currentDir1));
+
+              data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+              data = { ...data }
+              if (data.data) data = data.data[0]
+
+              //  удаляем, если пользователь указал на это
+              if (userPath.startsWith("-")) {
+                await deep.delete({ id: data.id });
+                continue;
+              }
+
+              // обновляем данные
+              if(folderName.split('__').length >= 3) {
+                nameLink = folderName.split('__')[1]
+                listNameLink[data.id] = nameLink;
+              }
+
+
+              if (!pathResults.find((item) => item.id === data.id)) {
+                pathResults.push({ id: data.id, path: currentPath }); // Добавляем id и путь текущей связи-папки
+              }
+            }
+          }
+          if (userPath.startsWith("-")) {
+            continue;
+          }
+
+          const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
+
+          if (pathToObjResult.queries) {
+            pathToObjResult.queries.forEach(query => {
+              if (!queries.some(q => q.id === query.id)) {
+                queries.push(query);
+              }
+            });
+          }
+
+          if (pathToObjResult && pathToObjResult.results) {
+            pathToObjResult.results.forEach(result => {
+              if (!results.some(q => q.id === result.id)) {
+                results.push(result);
+              }
+            });
+          }
+
+        }
       }
-    });
-    return { results: results, listNameLink: listNameLink, path: pathResults, queries: queries }; // Возвращаем результаты и список имен ссылок
-  };
-     
+      // если нужны все папки внутри только этой директории
+      else if (userPath.endsWith("~")) {
+        // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
+        const linkDirs = files.filter(file => fs.statSync(path.join(currentPath, file)).isDirectory());
+
+        for (const linkDir of linkDirs) {
+          let linkDirPath = path.join(path.relative(currentDir, currentPath), linkDir);
+
+          // удаляем, если пользователь указал на это
+          if (userPath.startsWith("-")) {
+            linkDirPath = `-${linkDirPath}`
+          }
+
+          // Проверяем, есть ли поддиректории в текущей директории
+          const subDirs = fs.readdirSync(path.join(currentPath, linkDir)).filter(file => fs.statSync(path.join(currentPath, linkDir, file)).isDirectory());
+
+          // Проверяем, есть ли поддиректории в директории
+          if (subDirs.length > 0) {
+            linkDirPath += "~"; // Если есть поддиректории, добавляем "~" в конец пути
+          }
+
+          queue.push({ currentPath: path.join(currentPath, linkDir), mode, commandRelation, userPath: linkDirPath });
+        }
+
+        // Добавляем значения listNameLink из поддиректорий в основной объект
+        for (const linkDir of linkDirs) {
+          const linkDirPath = path.join(currentPath, linkDir);
+          const linkDirFiles = fs.readdirSync(linkDirPath);
+          const hasRelationFiles = linkDirFiles.includes('data.json') && linkDirFiles.includes('value.txt');
+
+          if (hasRelationFiles) {
+            const dataFilePath = path.join(linkDirPath, 'data.json');
+            const folderName = path.basename(linkDirPath);
+            let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+            data = { ...data };
+            if (data.data) data = data.data[0];
+
+            if (data.id) {
+              // nameLink = folderName.split('__').length >= 3 ? folderName.split('__')[1] : await getLinkName(data?.id);
+              // listNameLink[data.id] = nameLink;
+              if(folderName.split('__').length >= 3) {
+                nameLink = folderName.split('__')[1]
+                listNameLink[data.id] = nameLink;
+              }
+            }
+          }
+        }
+      }
+
+      // пробуем поиск по 1 уровню вложенности
+      else {
+        // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
+        const linkDirs = files.filter(file => fs.statSync(path.join(currentPath, file)).isDirectory());
+
+        for (const linkDir of linkDirs) {
+          let linkDirPath = path.join(path.basename(currentPath), linkDir);
+
+          // удаляем, если пользователь указал на это
+          if (userPath.startsWith("-")) {
+            linkDirPath = `-${linkDirPath}`
+          }
+
+          queue.push({ currentPath: path.join(currentPath, linkDir), mode, commandRelation, userPath: linkDirPath });
+
+          // Добавляем значения listNameLink из поддиректорий в основной объект
+          const linkDirFiles = fs.readdirSync(path.join(currentPath, linkDir));
+          const hasRelationFiles = linkDirFiles.includes('data.json') && linkDirFiles.includes('value.txt');
+
+          if (hasRelationFiles) {
+            const dataFilePath = path.join(path.join(currentPath, linkDir), 'data.json');
+            const folderName = path.basename(path.join(currentPath, linkDir));
+            let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
+            data = { ...data };
+            if (data.data) data = data.data[0];
+
+            if (data.id) {
+              if(folderName.split('__').length >= 3) {
+                nameLink = folderName.split('__')[1]
+                listNameLink[data.id] = nameLink;
+              }
+
+              // Проверяем, существует ли путь в массиве pathResults
+              if (!pathResults.find((item) => item.id === data.id)) {
+                pathResults.push({ id: data.id, path: path.join(currentPath, linkDir) });
+              }
+            }
+          }
+        }
+      }
+    } else {
+      console.warn(`Путь не существует: ${currentPath}`);
+    }
+  }
+
+  // Удаляем "~" из путей
+  pathResults.forEach(result => {
+    if (result.path.endsWith("~")) {
+      result.path = result.path.slice(0, -1);
+    }
+  });
+  return { results: results, listNameLink: listNameLink, path: pathResults, queries: queries }; // Возвращаем результаты и список имен ссылок
+};
+
+
   
 
 
