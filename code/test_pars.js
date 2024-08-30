@@ -601,6 +601,7 @@ const handleRequest = async (parsedData, currentDir) => {
 
     // прямой запрос
     if (parsedData.straightPath && parsedData.straightPath.length > 0) {
+      await updateDataFromRelations(currentDir);
       straightPathData = await processPath(parsedData.straightPath, currentDir, 'straight', commandResults);
 
       if (commandResults) await commandStraightSync(commandResults, straightPathData);
@@ -613,10 +614,8 @@ const handleRequest = async (parsedData, currentDir) => {
       console.log(relationPathData, '------1111')
       
 
-      await fs.promises.writeFile(path.join(currentDir, 'tets.json'), JSON.stringify(relationPathData, null, 2), { flag: 'w' })
+      //await fs.promises.writeFile(path.join(currentDir, 'tets.json'), JSON.stringify(relationPathData, null, 2), { flag: 'w' })
 
-
-      //await createFile(path.join(currentDir, 'tets.json'), JSON.stringify(relationPathData, null, 2));
 
 
       if(!commandResults) commandResults = relationPathData.queries
@@ -655,11 +654,11 @@ const handleRequest = async (parsedData, currentDir) => {
 
 const checResultsWithCurrent = async (commandInstructions, relationPathData) => {
   let stateInsert = false;
-  // console.log('*************');
-  // console.log(relationPathData);
-  // console.log(relationPathData.results[0]);
-  // console.log(relationPathData.results[0].outText);
-  // console.log('*************');
+  console.log('*************');
+  console.log(relationPathData);
+  console.log(relationPathData.results[0]);
+  console.log(relationPathData.results[0].outText);
+  console.log('*************');
   const updatedPaths = []; // Массив для хранения путей и изменений
 
   // Итеративная обработка связей
@@ -669,22 +668,19 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
       console.log(linkFolder);
       console.log('//////////');
       const stack = [{ linkReq, linkFolder }];
-
+      const updates = {};
       while (stack.length > 0) {
           const { linkReq, linkFolder } = stack.pop();
           console.log(linkReq, 'linkReq11111.');
           console.log(linkFolder, 'linkFolder11111.');
           // Обработка ключей для обновления
           for (const key of Object.keys(linkReq)) {
-            console.log(key,'keykeykeykeykey')
               if (linkReq[key] !== linkFolder[key]) {
                   if (typeof linkReq[key] !== 'object') {
                       console.log('Обновляем', key, 'для', linkReq.id, 'на:', linkFolder[key]);
-                      const update = await deep.update({ id: linkReq.id }, { [key]: linkFolder[key] });
-                      console.log(update,'update')
+                      updates[key] = linkFolder[key]; //const update = awaiit deep.update({ id: linkReq.id }, { [key]: linkFolder[key] });
+                      console.log(updates,'updates')
                   } else if (key === 'value' && typeof linkReq[key] === 'object') {
-                    console.log(linkFolder[key].value,'valuevaluevaluevalue')
-                    console.log(linkReq.id,'linkReq.id')
                       const update = await deep.update(
                           { link_id: linkReq.id },
                           { value: linkFolder[key].value },
@@ -701,14 +697,15 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
                           if (matchingFolderLink) {
                               stack.push({ linkReq: linkReqValue[i], linkFolder: matchingFolderLink });
                           } else {
-                              // console.log(linkFolderValue, 'linkFolderValue.');
-                              // console.log(linkFolder, 'linkFolder.');
-                              // console.log(linkReqValue, 'linkReqValue.');
                               console.log('Связь', linkReqValue[i].id, 'не найдена в папке.');
                           }
                       }
                   }
               }
+          }
+          if (Object.keys(updates).length > 0) {
+            const update = await deep.update({ id: linkReq.id }, updates);
+            console.log(update,'update')
           }
       }
 
@@ -765,24 +762,23 @@ const processNewLinks = async (newLinks) => {
             console.log('Создана новая связь:', JSON.stringify(data));
         } else {
             // Обновление для всех ключей
-            await deep.update(
-              { id: newLink.id },
-              { from_id: newLink.from_id },
-            );
-            await deep.update(
-              { id: newLink.id },
-              { type_id: newLink.type_id },
-            );
-            await deep.update(
-              { id: newLink.id },
-              { to_id: newLink.to_id }
-            );
+            const updates = {};
+            if (newLink.from_id) updates.from_id = newLink.from_id;
+            if (newLink.type_id) updates.type_id = newLink.type_id;
+            if (newLink.to_id)   updates.to_id = newLink.to_id;
+          
+            if (Object.keys(updates).length > 0) {
+              await deep.update({ id: newLink.id }, updates);
+            }
+
             if (newLink.value) {
+              if (newLink.value.value) {
                 await deep.update(
                     { link_id: newLink.id },
                     { value: newLink.value?.value },
                     { table: (typeof newLink.value?.value) + 's' }
                 );
+              }
             }
             console.log('Обновление существующей связи:', newLink.id);
         }
@@ -1087,7 +1083,7 @@ const processNewLinks = async (newLinks) => {
                 if(data.data) data = data.data[0]
 
                 // Вызов функции обновления данных на основе папок отношений
-                await updateDataFromRelations(path.join(currentDirNotOneDir, currentDir1));
+                //await updateDataFromRelations(path.join(currentDirNotOneDir, currentDir1));
   
                 //  удаляем, если пользователь указал на это
                 if(userPath.startsWith("-")){
@@ -1192,7 +1188,7 @@ const processNewLinks = async (newLinks) => {
             else if(mode == 'relation'){
 
                // Вызов функции обновления данных на основе папок отношений
-               if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
+               //if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
 
                 if (linkResults.queries) {
                   linkResults.queries.forEach(query => {
@@ -1281,7 +1277,7 @@ const processNewLinks = async (newLinks) => {
                 });
               }
                // Вызов функции обновления данных на основе папок отношений
-               if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
+               //if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
                
               // обновляем данные
                 if (linkResults.queries) {
@@ -1603,31 +1599,30 @@ const commandStraightSync = async (commandResults, straightPathData) => {
             }
             if (JSON.stringify(commandResult) !== JSON.stringify(straightPathResult)) {
           
-              if (commandResult.to_id !== straightPathResult.to_id){
-                await deep.update( 
-                  {id: originalId },
-                  {to_id: straightPathResult.to_id }
-                  );      
-                  console.log(`Обновлена связь с id ${originalId} на`);
-                  console.log({to_id: straightPathResult.to_id })
+              const updates = {};
+
+              if (commandResult.to_id !== straightPathResult.to_id) {
+                updates.to_id = straightPathResult.to_id;
+                console.log(`Обновлена связь с id ${originalId} на`);
+                console.log({ to_id: straightPathResult.to_id });
               }
-                
-              if (commandResult.from_id !== straightPathResult.from_id){
-                await deep.update( 
-                  {id: originalId },
-                  {from_id: straightPathResult.from_id}
-                  );      
-                  console.log(`Обновлена связь с id ${originalId} на`);
-                  console.log({from_id: straightPathResult.from_id})
+              
+              if (commandResult.from_id !== straightPathResult.from_id) {
+                updates.from_id = straightPathResult.from_id;
+                console.log(`Обновлена связь с id ${originalId} на`);
+                console.log({ from_id: straightPathResult.from_id });
               }
-              if (commandResult.type_id !== straightPathResult.type_id){
-                await deep.update( 
-                  {id: originalId },
-                  {type_id: straightPathResult.type_id}
-                  );   
-                  console.log(`Обновлена связь с id ${originalId} на`);
-                  console.log({type_id: straightPathResult.type_id})
+              
+              if (commandResult.type_id !== straightPathResult.type_id) {
+                updates.type_id = straightPathResult.type_id;
+                console.log(`Обновлена связь с id ${originalId} на`);
+                console.log({ type_id: straightPathResult.type_id });
               }
+              
+              if (Object.keys(updates).length > 0) {
+                await deep.update({ id: originalId }, updates);
+              }
+
               if (commandResult.value !== straightPathResult.value) {
                 if((straightPathResult.value != null || straightPathResult.value != undefined )&& straightPathResult.value != null){
                   if (commandResult.value.value !== straightPathResult.value.value) {
