@@ -1064,10 +1064,6 @@ const processNewLinks = async (newLinks) => {
             
             listNameLink[data.id] = nameLink;
 
-
-
-            //console.log(results, 'results1111111-1')
-            //console.log(data, 'data1111')
             if (!results.find((item) => item.id === data.id)) {
               results.push(data); // Делаем "распаковку" массива
             }
@@ -1082,16 +1078,13 @@ const processNewLinks = async (newLinks) => {
             const pathParts = cleanPath.split(path.sep);
             for (let i = pathParts.length - 1; i >= 0; i--) {
               const currentDir1 = pathParts.slice(0, i + 1).join(path.sep);
-              //console.log(path.join(currentDirNotOneDir, currentDir1), 'dirdirdirdirdir')
               if (fs.existsSync(path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json'))) {
                 const dataFilePath = path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json');
                 const folderName = path.basename(path.join(currentDirNotOneDir, currentDir1));
                 
-                //console.log(folderName, 'folderName')
                 data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
                 data = {...data}
                 if(data.data) data = data.data[0]
-                //console.log(data, 'data----')
 
                 // Вызов функции обновления данных на основе папок отношений
                 await updateDataFromRelations(path.join(currentDirNotOneDir, currentDir1));
@@ -1121,10 +1114,6 @@ const processNewLinks = async (newLinks) => {
   
             const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
 
-            // console.log(pathToObjResult, 'pathResult1111111-2')
-            // console.log(queries, 'queries1111111-2')
-            //console.log(results, 'results1111111-2')
-            //if(pathToObjResult.queries) queries.push(...pathToObjResult.queries);
             if (pathToObjResult.queries) {
               pathToObjResult.queries.forEach(query => {
                 if (!queries.some(q => q.id === query.id)) {
@@ -1133,7 +1122,6 @@ const processNewLinks = async (newLinks) => {
               });
             }
 
-            //if(pathToObjResult.result) results.push(...[pathToObjResult.result]);
             if (pathToObjResult && pathToObjResult.results) {
               pathToObjResult.results.forEach(result => {
                 if (!results.some(q => q.id === result.id)) {
@@ -1142,8 +1130,7 @@ const processNewLinks = async (newLinks) => {
               });
             }
 
-            }
-          //console.log('Обработаны данные связи из папки:', data);
+          }
         } 
         // если нужны все папки внутри только этой директории
         else if(userPath.endsWith("~")){
@@ -1166,18 +1153,12 @@ const processNewLinks = async (newLinks) => {
               linkDirPath += "~"; // Если есть поддиректории, добавляем "~" в конец пути
             }
 
-
             // Запускаем рекурсивный вызов и собираем результаты
             const linkResults = await processPath([linkDirPath], currentDir, mode, commandRelation);
 
             if(mode == 'straight'){
-              // console.log(linkResults, 'linkResults222222-1')
-              // console.log(queries, 'queries222222-1')
-              //console.log(results, 'results222222-1')
-              //console.log(pathResults, 'pathResults222222-1')
-              // обновляем данные
 
-              //results.push(...linkResults.results); // Делаем "распаковку" массива
+              // обновляем данные
               if (linkResults.results) {
                 linkResults.results.forEach(result => {
                   if (!results.some(q => q.id === result.id)) {
@@ -1186,7 +1167,6 @@ const processNewLinks = async (newLinks) => {
                 });
               }
 
-              //pathResults.push(...linkResults.path); // Делаем "распаковку"массива
               if (linkResults.path) {
                 linkResults.path.forEach(path => {
                   if (!pathResults.some(q => q.id === path.id)) {
@@ -1212,24 +1192,8 @@ const processNewLinks = async (newLinks) => {
             else if(mode == 'relation'){
 
                // Вызов функции обновления данных на основе папок отношений
-
                if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
-               
-              // обновляем данные
-              // const data = {...linkResults.results};
-              // for(const link in data){
-               
-                             
-               
-                // queries.push(...pathToObjResult.queries);
-                // results.push(...[pathToObjResult.result]); 
-                // pathResults.push(...linkResults.path); // Делаем "распаковку"массива
 
-
-                // console.log(pathToObjResult, 'pathToObjResult2222222-2')
-                // console.log(queries, 'queries2222222-2')
-                //console.log(results, 'results2222222-2')
-                //console.log(pathResults, 'pathResults2222222-2')
                 if (linkResults.queries) {
                   linkResults.queries.forEach(query => {
                     if (!queries.some(q => q.id === query.id)) {
@@ -1275,21 +1239,8 @@ const processNewLinks = async (newLinks) => {
             // Запускаем рекурсивный вызов и собираем результаты
             const linkResults = await processPath([linkDirPath], currentDir, mode, commandRelation);
             if(mode == 'straight'){
+
               // обновляем данные
-              // if (!results.find((item) => item.id === data.id)) {
-              //   results.push(...linkResults.results); // Делаем "распаковку" массива
-              // }
-              // if (!pathResults.find((item) => item.id === data.id)) {
-              //   pathResults.push(...linkResults.path); // Делаем "распаковку"массива
-              // }
-
-
-
-              // results.push(...linkResults.results); // Делаем "распаковку" массива
-              // pathResults.push(...linkResults.path); // Делаем "распаковку"массива
-
-
-              // console.log(linkResults, 'linkResults33333-1')
               if (linkResults && linkResults.queries) {
                 linkResults.queries.forEach(query => {
                   if (!queries.some(q => q.id === query.id)) {
@@ -1330,20 +1281,9 @@ const processNewLinks = async (newLinks) => {
                 });
               }
                // Вызов функции обновления данных на основе папок отношений
-               await updateDataFromRelations(absoluteCleanPath);
+               if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
                
               // обновляем данные
-              // let data = {...linkResults.results};
-              // for(const link of data){
-              //   const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), path.relative(currentDir, linkDir), data[link], commandRelation);
-
-
-                //console.log(pathToObjResult, 'pathToObjResult333333-2')
-                // queries.push(...pathToObjResult.queries);
-                // results.push(...[pathToObjResult.results]);
-                // pathResults.push(...linkResults.path); // Делаем "распаковку"массива
-
-
                 if (linkResults.queries) {
                   linkResults.queries.forEach(query => {
                     if (!queries.some(q => q.id === query.id)) {
@@ -1362,7 +1302,6 @@ const processNewLinks = async (newLinks) => {
 
                 Object.assign(listNameLink, linkResults.listNameLink); // Объединяем списки имен ссылок
               }
-            //}
           }
         }
       } 
