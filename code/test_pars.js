@@ -1360,6 +1360,8 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
 
           const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
 
+          //pathToObjResult+pathToObjResult-pathToObjResult-pathToObjResult.push(pathToObjResult)
+
 
           let data1;
           try {
@@ -1546,6 +1548,19 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
 
               //const newData = JSON.stringify(fs.readFileSync(path.join(currentDir, 'tets1.json'), null, 2));
 
+
+
+
+
+
+
+
+
+
+
+
+
+
               let data;
               try {
                 data = JSON.parse(fs.readFileSync(path.join(currentDir, 'tets1.json')));
@@ -1556,6 +1571,17 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
               }
               data.push(linkResults.queries)
               await fs.promises.writeFile(path.join(currentDir, 'tets1.json'), JSON.stringify(data, null, 2), { flag: 'w' })
+
+
+
+
+
+
+
+
+
+
+              
               
               if (linkResults && linkResults.queries) {
                 for (const query of linkResults.queries) {
@@ -1877,7 +1903,7 @@ const pathToObjResultAndSelect2 = async (currentPath, relationFolderPath, data, 
 };
 
 const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, relations) => {
-  console.log(relationFolderPath, 'relationFolderPath999999')
+
   const segments = relationFolderPath.split(path.sep);
   let currentObject = data; // Используем изначально переданный объект как корневой
   let foundData = false;
@@ -1893,13 +1919,12 @@ const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, r
       }
 
       pathSoFar = path.join(currentPath, pathSoFar);
-
+      
+      
       if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
           const dataFilePath = path.join(pathSoFar, 'data.json');
           if (fs.existsSync(dataFilePath)) {
               const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-              // console.log(newData, 'newData')
-              // console.log(foundData, 'foundData')
               if (!foundData) {
                   // Если это первая найденная папка с data.json, используем её как корневой объект
                   Object.assign(currentObject, newData);
@@ -1923,7 +1948,7 @@ const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, r
                   Object.assign(currentObject[relationName], newData);
               }
 
-              if (i === segments.length - 1) {
+              if (i == segments.length) {
                   // Если это последний сегмент, то не углубляемся дальше
                   break;
               }
@@ -1933,7 +1958,7 @@ const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, r
               if (!relations) {
                   if (foundData && queries) {
                       returnObj = queries[queries.length - 1].return;
-                      for (let k = 1; k < (i-1); k++) {
+                      for (let k = 0; k < (segments.length - i); k++) {
                         returnObj = returnObj[Object.keys(returnObj)[0]].return;
                         returnObj[relationName] = { relation: segments[i-1], return: {} };
                       }
@@ -1958,8 +1983,6 @@ const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, r
     queries = [{'id': data.id}]
   }
 
-
-  console.log(queries, 'queries999999')
   return { results: [data], queries: queries };
 };
 
