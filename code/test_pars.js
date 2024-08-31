@@ -611,7 +611,7 @@ const handleRequest = async (parsedData, currentDir) => {
     // релейшн запрос
     if (parsedData.relationPath && parsedData.relationPath.length > 0) {
       relationPathData = await processPath(parsedData.relationPath, currentDir, 'relation', commandResults);
-      console.log(relationPathData, '------1111')
+      // console.log(relationPathData, '------1111')
       
 
       await fs.promises.writeFile(path.join(currentDir, 'tets.json'), JSON.stringify(relationPathData, null, 2), { flag: 'w' })
@@ -620,14 +620,6 @@ const handleRequest = async (parsedData, currentDir) => {
 
       if(!commandResults) commandResults = relationPathData.queries
       await checResultsWithCurrent(commandResults, relationPathData);
-
-      // if (commandResults) {
-      //   //console.log(commandResults, '------')
-      //   await checResultsWithCurrent(commandResults, relationPathData);
-      // }
-      // else {
-      //   await checResultsWithCurrent(relationPathData.queries, relationPathData);
-      // }
     }
 
   } catch (error) {
@@ -669,28 +661,23 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
       const updates = {};
       while (stack.length > 0) {
           const { linkReq, linkFolder } = stack.pop();
-          console.log(linkReq, 'linkReq11111.');
-          console.log(linkFolder, 'linkFolder11111.');
           // Обработка ключей для обновления
           for (const key of Object.keys(linkReq)) {
               if (linkReq[key] !== linkFolder[key]) {
                   if (typeof linkReq[key] !== 'object') {
                       console.log('Обновляем', key, 'для', linkReq.id, 'на:', linkFolder[key]);
                       updates[key] = linkFolder[key]; //const update = awaiit deep.update({ id: linkReq.id }, { [key]: linkFolder[key] });
-                      console.log(updates,'updates')
                   } else if (key === 'value' && typeof linkReq[key] === 'object') {
                       const update = await deep.update(
                           { link_id: linkReq.id },
                           { value: linkFolder[key].value },
                           { table: (typeof linkFolder[key].value) + 's' }
                       );
-                      console.log(update,'update')
                   } else {
                       const linkReqValue = Array.isArray(linkReq[key]) ? linkReq[key] : [linkReq[key]];
                       const linkFolderValue = Array.isArray(linkFolder[key]) ? linkFolder[key] : [linkFolder[key]];
 
                       for (let i = 0; i < linkReqValue.length; i++) {
-                        console.log(linkFolderValue, 'linkFolderValue11111')
                           const matchingFolderLink = linkFolderValue.find(folderLink => folderLink?.id === linkReqValue[i].id);
                           if (matchingFolderLink) {
                               stack.push({ linkReq: linkReqValue[i], linkFolder: matchingFolderLink });
@@ -703,7 +690,6 @@ const checResultsWithCurrent = async (commandInstructions, relationPathData) => 
           }
           if (Object.keys(updates).length > 0) {
             const update = await deep.update({ id: linkReq.id }, updates);
-            console.log(update,'update')
           }
       }
 
@@ -972,261 +958,6 @@ const processNewLinks = async (newLinks) => {
 };
 
 
-
-  
-
-// const processPath = async (straightPath, currentDir, mode, commandRelation) => {
-//   const queue = [];
-//   const results = [];
-//   const listNameLink = {};
-//   const pathResults = [];
-//   const queries = [];
-//   let cleanPath;
-//   let nameLink;
-//   for (const userPath of straightPath) {
-//     cleanPath = userPath;
-
-//     if (userPath.startsWith('-')) {
-//       cleanPath = userPath.substring(1);
-//     }
-
-//     if (userPath.endsWith('~')) {
-//       cleanPath = userPath.substring(0, userPath.length - 1);
-//     }
-
-//     let absoluteCleanPath = path.join(currentDir, cleanPath);
-
-//     if (path.basename(absoluteCleanPath) === 'data.json') {
-//       absoluteCleanPath = path.dirname(absoluteCleanPath).split(path.sep).pop();
-//     }
-
-//     // проверка по id папки-связи
-//     if (!fs.existsSync(absoluteCleanPath)) {
-//       const lastDirectory = path.basename(path.dirname(absoluteCleanPath));
-//       const firstValue = lastDirectory.split('__')[0];
-//       const parentDirectory = path.dirname(path.dirname(absoluteCleanPath));
-//       const parentDirectory1 = path.dirname(path.dirname(cleanPath));
-
-//       cleanPath = fs.readdirSync(parentDirectory1).find(folder => folder.startsWith(`${firstValue}__`));
-//       absoluteCleanPath = fs.readdirSync(parentDirectory).find(folder => folder.startsWith(`${firstValue}__`));
-
-//       if (!fs.existsSync(absoluteCleanPath)) {
-//         console.warn(`Путь не существует: ${absoluteCleanPath}`);
-//         continue;
-//       }
-//     }
-
-//     queue.push({ currentPath: absoluteCleanPath, mode, commandRelation, userPath });
-//   }
-
-//   while (queue.length > 0) {
-//     const { currentPath, mode, commandRelation, userPath } = queue.shift();
-
-//     if (fs.existsSync(currentPath)) {
-//       const files = fs.readdirSync(currentPath);
-//       const hasRelationFiles = files.includes('data.json') && files.includes('value.txt');
-
-//       // если папка - папка-связь
-//       if (hasRelationFiles && !userPath.endsWith("~")) {
-//         // обрабатываем файл data.json
-//         const dataFilePath = path.join(currentPath, 'data.json');
-//         const folderName = path.basename(currentPath);
-//         let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-//         data = { ...data };
-//         if (data.data) data = data.data[0];
-
-//         //console.log(mode, 'mode')
-//         if (mode == 'straight') {
-
-//           // удаляем, если пользователь указан на это
-//           if (userPath.startsWith("-")) {
-//             await deep.delete({ id: data.id });
-//             continue;
-//           }
-
-//           // Читаем значение из value.txt
-//           let value = fs.readFileSync(path.join(currentPath, 'value.txt'), 'utf-8');
-//           if (value == 'null') value = null;
-//           if (data.value || data.value != null) {
-//             if (data.value.value != value) data.value.value = value;
-//           }
-
-//           // Получаем имя ссылки
-
-
-//           // обновляем данные
-//           if(folderName.split('__').length >= 3) {
-//             nameLink = folderName.split('__')[1]
-//             listNameLink[data.id] = nameLink;
-//           }
-
-//           if (!results.find((item) => item.id === data.id)) {
-//             results.push(data); // Делаем "распаковку" массива
-//           }
-//           if (!pathResults.find((item) => item.id === data.id)) {
-//             pathResults.push({ id: data.id, path: currentPath }); // Делаем "распаковку"массива
-//           }
-
-//         } else if (mode == 'relation') {
-//           cleanPath = path.join(path.basename(currentDir), path.relative(currentDir, currentPath));
-//           const currentDirNotOneDir = path.dirname(currentDir)
-//           const pathParts = cleanPath.split(path.sep);
-//           for (let i = pathParts.length - 1; i >= 0; i--) {
-//             const currentDir1 = pathParts.slice(0, i + 1).join(path.sep);
-//             if (fs.existsSync(path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json'))) {
-//               const dataFilePath = path.join(path.join(currentDirNotOneDir, currentDir1), 'data.json');
-//               const folderName = path.basename(path.join(currentDirNotOneDir, currentDir1));
-
-//               data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-//               data = { ...data }
-//               if (data.data) data = data.data[0]
-
-//               //  удаляем, если пользователь указал на это
-//               if (userPath.startsWith("-")) {
-//                 await deep.delete({ id: data.id });
-//                 continue;
-//               }
-
-//               // обновляем данные
-//               if(folderName.split('__').length >= 3) {
-//                 nameLink = folderName.split('__')[1]
-//                 listNameLink[data.id] = nameLink;
-//               }
-
-
-//               if (!pathResults.find((item) => item.id === data.id)) {
-//                 pathResults.push({ id: data.id, path: currentPath }); // Добавляем id и путь текущей связи-папки
-//               }
-//             }
-//           }
-//           if (userPath.startsWith("-")) {
-//             continue;
-//           }
-
-//           const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
-
-//           if (pathToObjResult.queries) {
-//             pathToObjResult.queries.forEach(query => {
-//               if (!queries.some(q => q.id === query.id)) {
-//                 queries.push(query);
-//               }
-//             });
-//           }
-
-//           if (pathToObjResult && pathToObjResult.results) {
-//             pathToObjResult.results.forEach(result => {
-//               if (!results.some(q => q.id === result.id)) {
-//                 results.push(result);
-//               }
-//             });
-//           }
-
-//         }
-//       }
-//       // если нужны все папки внутри только этой директории
-//       else if (userPath.endsWith("~")) {
-//         // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-//         const linkDirs = files.filter(file => fs.statSync(path.join(currentPath, file)).isDirectory());
-
-//         for (const linkDir of linkDirs) {
-//           let linkDirPath = path.join(path.relative(currentDir, currentPath), linkDir);
-
-//           // удаляем, если пользователь указал на это
-//           if (userPath.startsWith("-")) {
-//             linkDirPath = `-${linkDirPath}`
-//           }
-
-//           // Проверяем, есть ли поддиректории в текущей директории
-//           const subDirs = fs.readdirSync(path.join(currentPath, linkDir)).filter(file => fs.statSync(path.join(currentPath, linkDir, file)).isDirectory());
-
-//           // Проверяем, есть ли поддиректории в директории
-//           if (subDirs.length > 0) {
-//             linkDirPath += "~"; // Если есть поддиректории, добавляем "~" в конец пути
-//           }
-
-//           queue.push({ currentPath: path.join(currentPath, linkDir), mode, commandRelation, userPath: linkDirPath });
-//         }
-
-//         // Добавляем значения listNameLink из поддиректорий в основной объект
-//         for (const linkDir of linkDirs) {
-//           const linkDirPath = path.join(currentPath, linkDir);
-//           const linkDirFiles = fs.readdirSync(linkDirPath);
-//           const hasRelationFiles = linkDirFiles.includes('data.json') && linkDirFiles.includes('value.txt');
-
-//           if (hasRelationFiles) {
-//             const dataFilePath = path.join(linkDirPath, 'data.json');
-//             const folderName = path.basename(linkDirPath);
-//             let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-//             data = { ...data };
-//             if (data.data) data = data.data[0];
-
-//             if (data.id) {
-//               // nameLink = folderName.split('__').length >= 3 ? folderName.split('__')[1] : await getLinkName(data?.id);
-//               // listNameLink[data.id] = nameLink;
-//               if(folderName.split('__').length >= 3) {
-//                 nameLink = folderName.split('__')[1]
-//                 listNameLink[data.id] = nameLink;
-//               }
-//             }
-//           }
-//         }
-//       }
-
-//       // пробуем поиск по 1 уровню вложенности
-//       else {
-//         // Папка, нужная для поиска связанных папок — рекурсивно обрабатываем ее
-//         const linkDirs = files.filter(file => fs.statSync(path.join(currentPath, file)).isDirectory());
-
-//         for (const linkDir of linkDirs) {
-//           let linkDirPath = path.join(path.basename(currentPath), linkDir);
-
-//           // удаляем, если пользователь указал на это
-//           if (userPath.startsWith("-")) {
-//             linkDirPath = `-${linkDirPath}`
-//           }
-
-//           queue.push({ currentPath: path.join(currentPath, linkDir), mode, commandRelation, userPath: linkDirPath });
-
-//           // Добавляем значения listNameLink из поддиректорий в основной объект
-//           const linkDirFiles = fs.readdirSync(path.join(currentPath, linkDir));
-//           const hasRelationFiles = linkDirFiles.includes('data.json') && linkDirFiles.includes('value.txt');
-
-//           if (hasRelationFiles) {
-//             const dataFilePath = path.join(path.join(currentPath, linkDir), 'data.json');
-//             const folderName = path.basename(path.join(currentPath, linkDir));
-//             let data = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-//             data = { ...data };
-//             if (data.data) data = data.data[0];
-
-//             if (data.id) {
-//               if(folderName.split('__').length >= 3) {
-//                 nameLink = folderName.split('__')[1]
-//                 listNameLink[data.id] = nameLink;
-//               }
-
-//               // Проверяем, существует ли путь в массиве pathResults
-//               if (!pathResults.find((item) => item.id === data.id)) {
-//                 pathResults.push({ id: data.id, path: path.join(currentPath, linkDir) });
-//               }
-//             }
-//           }
-//         }
-//       }
-//     } else {
-//       console.warn(`Путь не существует: ${currentPath}`);
-//     }
-//   }
-
-//   // Удаляем "~" из путей
-//   pathResults.forEach(result => {
-//     if (result.path.endsWith("~")) {
-//       result.path = result.path.slice(0, -1);
-//     }
-//   });
-//   return { results: results, listNameLink: listNameLink, path: pathResults, queries: queries }; // Возвращаем результаты и список имен ссылок
-// };
-
-
   
 const processPath = async (straightPath, currentDir, mode, commandRelation) => {
   
@@ -1333,9 +1064,6 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
               data = {...data}
               if(data.data) data = data.data[0]
 
-              // Вызов функции обновления данных на основе папок отношений
-              //await updateDataFromRelations(path.join(currentDirNotOneDir, currentDir1));
-
               //  удаляем, если пользователь указал на это
               if(userPath.startsWith("-")){
                 await deep.delete({id: data.id});
@@ -1359,21 +1087,6 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
           }
 
           const pathToObjResult = await pathToObjResultAndSelect(path.dirname(currentDir), cleanPath, data, commandRelation);
-
-          //pathToObjResult+pathToObjResult-pathToObjResult-pathToObjResult.push(pathToObjResult)
-
-
-          let data1;
-          try {
-            data1 = JSON.parse(fs.readFileSync(path.join(currentDir, 'tets2.json')));
-            data1 = [data1]
-          } catch (error) {
-            console.error('Ошибка парсинга JSON:', error);
-            data1 = []; // Инициализация пустого объекта, если файл пуст
-          }
-          data1.push(pathToObjResult.queries)
-          await fs.promises.writeFile(path.join(currentDir, 'tets2.json'), JSON.stringify(data1, null, 2), { flag: 'w' })
-
 
 
           if (pathToObjResult.queries) {
@@ -1457,24 +1170,6 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
           }
           else if(mode == 'relation'){
 
-             // Вызов функции обновления данных на основе папок отношений
-             //if(hasRelationFiles) await updateDataFromRelations(absoluteCleanPath);
-
-              // if (linkResults.queries) {
-              //   linkResults.queries.forEach(query => {
-              //     if (!queries.some(q => q === query)) {
-              //       queries.push(query);
-              //     }
-              //   });
-              // }
-
-              // if (linkResults && linkResults.results) {
-              //   linkResults.results.forEach(result => {
-              //     if (!results.some(r => r === result)) {
-              //       results.push(result);
-              //     }
-              //   }); 
-              // }
 
               if (linkResults && linkResults.results) {
                 for (const result of linkResults.results) {
@@ -1542,45 +1237,6 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
                   }
                 }
               }
-
-
-              //console.log(linkResults.queries, 'linkResults.queries')
-
-              //const newData = JSON.stringify(fs.readFileSync(path.join(currentDir, 'tets1.json'), null, 2));
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-              let data;
-              try {
-                data = JSON.parse(fs.readFileSync(path.join(currentDir, 'tets1.json')));
-                data = [data]
-              } catch (error) {
-                console.error('Ошибка парсинга JSON:', error);
-                data = []; // Инициализация пустого объекта, если файл пуст
-              }
-              data.push(linkResults.queries)
-              await fs.promises.writeFile(path.join(currentDir, 'tets1.json'), JSON.stringify(data, null, 2), { flag: 'w' })
-
-
-
-
-
-
-
-
-
-
               
               
               if (linkResults && linkResults.queries) {
@@ -1634,27 +1290,6 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
                 }
               }
               
-              
-
-              
-
-              // if (linkResults && linkResults.path) {
-              //   for (const path of linkResults.path) {
-              //     let found = false;
-              //     for (const p of pathResults) {
-              //       if (p.id === path.id) {
-              //         found = true;
-              //         if (p.path !== path.path) {
-              //           p.path = [p.path, path.path];
-              //         }
-              //         break;
-              //       }
-              //     }
-              //     if (!found) {
-              //       pathResults.push(path);
-              //     }
-              //   }
-              // }
 
               if (linkResults.path) {
                 linkResults.path.forEach(path => {
@@ -1814,94 +1449,6 @@ const processPath = async (straightPath, currentDir, mode, commandRelation) => {
    
 
 
-
-const pathToObjResultAndSelect2 = async (currentPath, relationFolderPath, data, relations) => {
-  console.log(relationFolderPath, 'relationFolderPath999999')
-  const segments = relationFolderPath.split(path.sep);
-  let currentObject = data; // Используем изначально переданный объект как корневой
-  let foundData = false;
-  let relationsPath = relations;
-  let queries;
-  let returnObj;
-  let query;
-  for (var i = 0; i < segments.length; i++) {
-
-      let pathSoFar = '';
-      for (let j = 0; j <= i; j++) {
-        pathSoFar = path.join(pathSoFar, segments[j]);
-      }
-
-      pathSoFar = path.join(currentPath, pathSoFar);
-
-      if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
-          const dataFilePath = path.join(pathSoFar, 'data.json');
-          if (fs.existsSync(dataFilePath)) {
-              const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-              // console.log(newData, 'newData')
-              // console.log(foundData, 'foundData')
-              if (!foundData) {
-                  // Если это первая найденная папка с data.json, используем её как корневой объект
-                  Object.assign(currentObject, newData);
-                  foundData = true;
-                  continue; // Переходим к следующему сегменту
-              }
-
-              // Логика для работы с отношениями
-              let relationName = segments[i-1] + 'Text';
-              for (const key in relationsPath) {
-                  if (relationsPath[key].relation === segments[i]) {
-                      relationName = key;
-                      relationsPath = relationsPath[key].return;
-                      break;
-                  }
-              }
-
-              if (!currentObject.hasOwnProperty(relationName)) {
-                  currentObject[relationName] = newData;
-              } else {
-                  Object.assign(currentObject[relationName], newData);
-              }
-
-              if (i === segments.length - 1) {
-                  // Если это последний сегмент, то не углубляемся дальше
-                  break;
-              }
-
-              currentObject = currentObject[relationName]; // Обновляем текущий объект
-
-              if (!relations) {
-                  if (foundData && queries) {
-                      returnObj = queries[queries.length - 1].return;
-                      for (let k = 1; k < (i-1); k++) {
-                        returnObj = returnObj[Object.keys(returnObj)[0]].return;
-                        returnObj[relationName] = { relation: segments[i-1], return: {} };
-                      }
-                  } else{
-                      const dataLinkOne = JSON.parse(fs.readFileSync(path.join(path.dirname(path.dirname(pathSoFar)), 'data.json'), 'utf-8'));
-                      if(!query){
-                        query = {
-                            id: dataLinkOne.id,
-                            return: {}
-                        };
-                      } else query = query
-                      query.return[relationName] = { relation: segments[i-1], return: {} };
-                      if(queries == undefined) queries = []
-                      queries.push(query);
-                  }
-              }
-          }
-      }
-  }
-
-  if(!queries){
-    queries = [{'id': data.id}]
-  }
-
-
-  console.log(queries, 'queries999999')
-  return { results: [data], queries: queries };
-};
-
 const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, relations) => {
 
   const segments = relationFolderPath.split(path.sep);
@@ -1985,111 +1532,6 @@ const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, r
 
   return { results: [data], queries: queries };
 };
-
-
-// const pathToObjResultAndSelect = async (currentPath, relationFolderPath, data, relations) => {
-//   const segments = relationFolderPath.split(path.sep);
-//   let currentObject = data; // Используем изначально переданный объект как корневой
-//   let foundData = false;
-//   let relationsPath = relations;
-//   let queries;
-//   let returnObj;
-//   let query;
-//   const results = [];
-
-//   for (var i = 0; i < segments.length; i++) {
-//     let pathSoFar = '';
-//     for (let j = 0; j <= i; j++) {
-//       pathSoFar = path.join(pathSoFar, segments[j]);
-//     }
-
-//     pathSoFar = path.join(currentPath, pathSoFar);
-
-//     if (fs.existsSync(pathSoFar) && fs.statSync(pathSoFar).isDirectory()) {
-//       const dataFilePath = path.join(pathSoFar, 'data.json');
-//       if (fs.existsSync(dataFilePath)) {
-//         const newData = JSON.parse(fs.readFileSync(dataFilePath, 'utf-8'));
-//         // console.log(newData, 'newData')
-//         if (!foundData) {
-//           // Если это первая найденная папка с data.json, используем её как корневой объект
-//           Object.assign(currentObject, newData);
-//           foundData = true;
-//           continue; // Переходим к следующему сегменту
-//         }
-
-//         // Логика для работы с отношениями
-//         let relationName = segments[i-1] + 'Text';
-//         for (const key in relationsPath) {
-//           if (relationsPath[key].relation === segments[i]) {
-//             relationName = key;
-//             relationsPath = relationsPath[key].return;
-//             break;
-//           }
-//         }
-
-//         if (!currentObject.hasOwnProperty(relationName)) {
-//           currentObject[relationName] = newData;
-//         } else {
-//           if (!Array.isArray(currentObject[relationName])) {
-//             currentObject[relationName] = [currentObject[relationName]];
-//           }
-//           currentObject[relationName].push(newData);
-//         }
-
-//         // Проверяем, есть ли поддиректории в текущей директории
-//         const subDirs = fs.readdirSync(pathSoFar).filter(file => fs.statSync(path.join(pathSoFar, file)).isDirectory());
-
-//         // Если есть поддиректории, то relationName должен быть списком
-//         if (subDirs.length > 1) {
-//           if (!Array.isArray(currentObject[relationName])) {
-//             currentObject[relationName] = [currentObject[relationName]];
-//           }
-//           for (const subDir of subDirs) {
-//             const subDirPath = path.join(pathSoFar, subDir);
-//             const subDirData = await pathToObjResultAndSelect(currentPath, subDirPath, {}, relationsPath);
-//             currentObject[relationName].push(...subDirData.results);
-//           }
-//         } else {
-//           currentObject = currentObject[relationName]; // Обновляем текущий объект
-//         }
-
-//         if (!relations) {
-//           if (foundData && queries) {
-//             returnObj = queries[queries.length - 1].return;
-//             for (let k = 1; k < (i-1); k++) {
-//               returnObj = returnObj[Object.keys(returnObj)[0]].return;
-//               returnObj[relationName] = { relation: segments[i-1], return: {} };
-//             }
-//           } else{
-//             const dataLinkOne = JSON.parse(fs.readFileSync(path.join(path.dirname(path.dirname(pathSoFar)), 'data.json'), 'utf-8'));
-//             if(!query){
-//               query = {
-//                   id: dataLinkOne.id,
-//                   return: {}
-//               };
-//             } else query = query
-//             query.return[relationName] = { relation: segments[i-1], return: {} };
-//             if(queries == undefined) queries = []
-//             queries.push(query);
-//           }
-//         }
-
-//         // Рекурсивно проходим по всем поддиректориям
-//         for (const subDir of subDirs) {
-//           const subDirPath = path.join(pathSoFar, subDir);
-//           const subDirData = await pathToObjResultAndSelect(currentPath, subDirPath, currentObject, relationsPath);
-//           results.push(...subDirData.results);
-//         }
-//       }
-//     }
-//   }
-
-//   if(!queries){
-//     queries = [{'id': data.id}]
-//   }
-
-//   return { results: [data, ...results], queries: queries };
-// };
 
 
 const noCommandStraightSync = async (straightPathResults) => {
