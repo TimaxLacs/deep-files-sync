@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import pkg from '@apollo/client/core/core.cjs';
 const { ApolloClient, InMemoryCache, split, HttpLink } = pkg;
 import { DeepClient, parseJwt } from "@deep-foundation/deeplinks/imports/client.js";
@@ -9,13 +10,66 @@ import ws, { createWebSocketStream } from 'ws';
 import fs from 'fs';
 import path from 'path';
 import chokidar from 'chokidar';
+import yargs from 'yargs';
+import { hideBin } from 'yargs/helpers';
+import _ from 'lodash';
 
 let evalData = {}; // Объект для хранения данных удаленных файлов
-let subscriptionCount = 0;
 
-const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwczovL2hhc3VyYS5pby9qd3QvY2xhaW1zIjp7IngtaGFzdXJhLWFsbG93ZWQtcm9sZXMiOlsiYWRtaW4iXSwieC1oYXN1cmEtZGVmYXVsdC1yb2xlIjoiYWRtaW4iLCJ4LWhhc3VyYS11c2VyLWlkIjoiMzgwIn0sImlhdCI6MTcyMTYzNzI4M30.-Xsnzj_2C289UyWzsSXsnaFSXCukQTxaYLFTW4AQaIo';
-const GQL_URN = '3006-deepfoundation-dev-f5qo0ydbv62.ws-eu115.gitpod.io/gql';
-const dirPath = '/home/timax/Code/Deep-project/deep-files-sync/test';
+
+
+const argv = yargs(hideBin(process.argv))
+  .option('url', {
+    alias: 'u',
+    type: 'string',
+    description: 'URL deeplinks'
+  })
+  .option('folder-path', {
+    alias: 'f',
+    type: 'string',
+    description: 'Path to folder'
+  })
+  .option('token', {
+    alias: 't',
+    type: 'string',
+    description: 'Token',
+    default: ''
+  })
+  .argv;
+
+let token = argv.token;
+let dirPath = argv['folder-path'];
+let urn = argv.url;
+let ssl;
+
+
+token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwczovL2hhc3VyYS5pby9qd3QvY2xhaW1zIjp7IngtaGFzdXJhLWFsbG93ZWQtcm9sZXMiOlsiYWRtaW4iXSwieC1oYXN1cmEtZGVmYXVsdC1yb2xlIjoiYWRtaW4iLCJ4LWhhc3VyYS11c2VyLWlkIjoiMzgwIn0sImlhdCI6MTcyMTYzNzI4M30.-Xsnzj_2C289UyWzsSXsnaFSXCukQTxaYLFTW4AQaIo';
+urn = 'https://3006-deepfoundation-dev-f5qo0ydbv62.ws-eu115.gitpod.io/gql';
+ssl = true
+dirPath = '/home/timax/Code/Deep-project/deep-files-sync/test';
+
+
+const url_protocol = urn.match(/^(http:|https:)/)[0];
+if (url_protocol === "https:") {
+  ssl = true;
+} else if (url_protocol === "http:") {
+  ssl = false;
+} else {
+  throw new Error(`Unsupported protocol: ${url.protocol}`);
+}
+
+if (!urn.endsWith("/gql")) {
+  urn += "/gql";
+}
+urn = urn.replace(/^https:\/\//, "");
+urn.replace(/^http:\/\//, "");
+
+let GQL_URN = process.env.GQL_URN || urn
+let GQL_SSL = process.env.GQL_SSL || ssl;
+
+
+
+
 
 
 
