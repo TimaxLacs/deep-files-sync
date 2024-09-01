@@ -1,18 +1,284 @@
-# deep-files-sync
+# Deep Files Sync
 
-Synchronizing text files in a folder on the local computer with Deep instance.
+## Установка
 
+Установите утилиту глобально с помощью следующей команды:
 
-Installation:
-```
+```bash
 npm install -g deep-files-sync
 ```
-Usage:
-```
-deep-files-sync --url <deeplinks url> --space-id <space-id> --folder-path <path to folder> [--token <token>]
-```
-Example:
-```
-deep-files-sync --url https://3006-deepfoundation-dev-9xew1crvqrb.ws-eu107.gitpod.io --space-id 380 --folder-path \\mnt\\c\\Users\\samsung\\Deep.project\\sync-file\\deep-files-sync\\dirPath --token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwczovL2hhc3VyYS5pby9qd3QvY2xhaW1zIjp7IngtaGFzdXJhLWFsbG93ZWQtcm9sZXMiOlsiYWRtaW4iXSwieC1oYXN1cmEtZGVmYXVsdC1yb2xlIjoiYWRtaW4iLCJ4LWhhc3VyYS11c2VyLWlkIjoiMzgwIn0sImlhdCI6MTcwNTg3ODE3MX0.rRUt9Oujqc0ftirjYnLGI6oSNbg7ImNLG5FhV5lXqCQ
+
+## Использование
+
+Запустите утилиту с указанием необходимых параметров:
+
+```bash
+deep-files-sync --url <deeplinks url> --folder-path <path to folder> [--token <token>]
 ```
 
+### Пример
+
+```bash
+deep-files-sync --url https://3006-deepfoundation-dev-f5qo0ydbv62.ws-eu115.gitpod.io/gql --folder-path /home/timax/Code/Deep-project/deep-files-sync/test --token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwczovL2hhc3VyYS5pby9qd3QvY2xhaW1zIjp7IngtaGFzdXJhLWFsbG93ZWQtcm9sZXMiOlsiYWRtaW4iXSwieC1oYXN1cmEtZGVmYXVsdC1yb2xlIjoiYWRtaW4iLCJ4LWhhc3VyYS11c2VyLWlkIjoiMzgwIn0sImlhdCI6MTcyMTYzNzI4M30.-Xsnzj_2C289UyWzsSXsnaFSXCukQTxaYLFTW4AQaIo
+```
+
+### Параметры
+
+- **--url**: Указывает URL для подключения к Deep.
+- **--folder-path**: Указывает путь к локальной директории для синхронизации.
+- **--token**: Указывает токен аутентификации.
+
+## Работа с eval.js
+
+При запуске утилиты в указанной директории будет создан файл `eval.js`, который выполняет сохраненное внутри него содержимое при удалении.
+
+### Удаление eval.js
+
+Чтобы полностью удалить `eval.js`, сначала нужно очистить его содержимое.
+
+## Структура Хранения Связей
+
+Связи представляются отдельными директориями, формируемыми следующим образом:
+
+- Например: `380_admin__22`.
+- Название директории формируется на основе ID связи и её имени, если оно есть.
+
+В каждой папке-связи присутствуют следующие файлы:
+
+- `value.txt`: Содержит значение связи (если отсутствует, то `null`).
+- `data.json`: Объект связи, включая её содержимое.
+
+Файлы синхронизированы: изменения в `value.txt` автоматически отражаются в `data.json`, если значение `value` не является `null`. 
+
+### Пример структуры хранения
+
+Структура может выглядеть следующим образом:
+
+```
+/home/timax/Code/Deep-project/deep-files-sync1/test/
+├── 380__admin__22/
+│   ├── value.txt
+│   └── data.json
+├── links/
+│   ├── 380__admin__22/
+│   │   ├── out/
+│   │   │   └── 1598__55/
+│   │   │       └── to/
+│   │   │           └── 906__packageClientHandler__66/
+```
+
+## Режимы Работы eval.js
+
+### Синхронизация из Deep в Папки
+
+Используйте команды для выполнения запросов и создания структуры директорий. Например:
+
+#### Поиск связи
+
+```javascript
+deep.select({ id: 380 });
+```
+
+Это создаст директорию `380_admin__22` в папке, откуда был удалён `eval.js`.
+
+#### Релейшн запрос
+
+```javascript
+deep.select({
+    id: 380,
+    return: {
+        contain: {
+            relation: 'out',
+            return: {
+                packages: {
+                    relation: 'to'
+                }
+            }
+        }
+    }
+});
+```
+
+Это создаст структуру директорий:
+
+```
+*начальная папка-отношение*/380__admin__22/out/*список всех исходящих связей*/to/*список всех связей, в которые входят предыдущие связи*
+```
+
+### Пример релейшн запроса
+
+```javascript
+deep.select({
+    id: 380,
+    return: {
+        contain: {
+            relation: 'out',
+            return: {
+                packages: {
+                    relation: 'to'
+                }
+            }
+        }
+    }
+});
+```
+
+Создаст следующую структуру директорий:
+
+```
+links/380__admin__1/out/1598__55/to/906__packageClientHandler__66
+```
+
+### Подписка
+
+Можно подписаться на изменения:
+
+```javascript
+deepSub.subscribe({
+    type_id: 66,
+    in: {
+        type_id: 3,
+        from_id: 380
+    }
+});
+```
+
+Этот режим создаёт файлы подписки, которые будут обновляться при изменениях в базе данных. Для отписки просто удалите файл подписки.
+
+Файлы подписки именуются как `subIn<номер>.js`, например `subIn0.js`.
+
+### Пример подписки
+
+```javascript
+deepSub.subscribe({
+    type_id: 66,
+    in: {
+        type_id: 3,
+        from_id: 380
+    }
+});
+```
+
+Создаст файл подписки с данными, которые будут обновляться при изменениях.
+
+
+
+## Отправка Данных из Папочной Структуры в Deep
+
+Этот режим позволяет отправлять данные из вашей локальной папочной структуры обратно в Deep. Для использования этого режима необходимо создать следующую структуру внутри файла `eval.js`:
+
+```javascript
+{
+    "mode": "<req/sub>",
+    "relationPath": [],
+    "straightPath": [],
+    "command": ""
+}
+```
+### Обычная отправка
+
+В данном случае не учитывается отношение между связями, которое выстроено через папки-отношения. Синхронизация происходит только чреез содержимое data.json каждый указанной папки-связи.
+
+Поэтому он учитывает только самые последние связи в переданном пути:
+```javascript
+{
+    "mode": "req",
+    "relationPath": [],
+    "straightPath": ["links/380__admin__22", "links/388__user__22/out/1111__3"],
+    "command": ""
+}
+```
+
+### Релейшн отправка
+
+В поле релейшн передается путь, который, по совместительству, является и структурой отношейний между связями. Из него в последующем будет строится сравнивтельный запрос
+Нужно формировать стурктуру черелуя папки-связи и папки-отношения.
+
+В этом примере:
+```javascript
+{
+    "mode": "req",
+    "relationPath": ["links/380__admin__22/out/1598__55/to/906__packageClientHandler__66"],
+    "straightPath": [],
+    "command": ""
+}
+```
+
+Будет создан такой сравнительный запрос
+```
+deep.select({id: 380, return:{contain: {relation: 'out', return:{packages: {relation: 'to'}}}}})
+```
+
+### Отправка с командой
+
+Команда позволяет сравнивать структуры данных с другими выбранными связями
+```javascript
+{
+    "mode": "req",
+    "relationPath": ["links/380__admin__22/out/1598__55/to/906__packageClientHandler__66"],
+    "straightPath": [],
+    "command": "deep.select({ id: 1212, return: { contain: { relation: 'out', return: { packages: { relation: 'to' } } } }});"
+}
+```
+В данном примере сравнение происходит уже от связи с id 1212 
+### Подписка
+
+Режим подписки отправляет данные в Deep каждый раз, когда они обновляются в указанной структуре:
+
+```javascript
+{
+    "mode": "sub",
+    "relationPath": ["links/380__admin__22/out/1598__55/to/906__packageClientHandler__66"],
+    "straightPath": ["links/380__admin__22", "links/388__user__22"],
+    "command": ""
+}
+```
+
+
+### Дополнительные обработчики:
+
+#### Передача директории с папками-связями
+
+У меня есть папка links, которая хранит в себе 2 папка-связи:
+```
+links/380__admin__22
+links/388__user__22
+```
+
+Если мы передадим только `links`, то мы сможем передать сразу 2 эти папка-связи:
+```javascript
+{
+    "mode": "sub",
+    "relationPath": [],
+    "straightPath": ["links"],
+    "command": ""
+}
+```
+
+#### Передача всех вложенных поддерикторий
+
+В ситуации, когда у нас есть множество вложенных поддиректорий можно использовать на конце обработчик "~" :
+```javascript
+{
+    "mode": "sub",
+    "relationPath": [],
+    "straightPath": ["links~"],
+    "command": ""
+}
+```
+В данном примере он пройдется и сохранит все папки-связи, которые есть в указанной директории и всех поддиректориях внутри нее.
+
+#### Прямое удаление
+
+Если нужно удалить какую-то выборочную папку-связь или группу, то можно использовать обработчик "-" :
+```javascript
+{
+    "mode": "sub",
+    "relationPath": [],
+    "straightPath": ["-links/380__admin__22", "-links", "~links"],
+    "command": ""
+}
+```
+В данном примере мы также совместли обработчик удаления с обработчиком перебора всех поддиректорий.
+
+---
